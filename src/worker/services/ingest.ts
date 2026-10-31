@@ -94,7 +94,7 @@ async function insertTx(db: DB, t: NewTransaction): Promise<Transaction | null> 
 export async function recordParsed(
   db: DB,
   p: ParsedEmail,
-  ctx: { emailId: number | null; rules?: Rule[]; owners?: string[] },
+  ctx: { emailId: number | null; rules?: Rule[]; owners?: string[]; subject?: string },
 ): Promise<{ status: "parsed" | "merged" | "duplicate"; ids: number[] }> {
   const rules = ctx.rules ?? (await loadRules(db));
   const owners = ctx.owners ?? (await getSettings(db)).ownerNames;
@@ -167,6 +167,9 @@ export async function recordParsed(
     }
   }
 
+  // Tanpa nama merchant/pengirim: pakai subjek email sebagai keterangan.
+  if (!main.merchant && !main.description && ctx.subject) main.description = ctx.subject.slice(0, 200);
+
   const ids: number[] = [];
   let status: "parsed" | "merged" | "duplicate" = "parsed";
 
@@ -238,7 +241,7 @@ export async function processEmail(db: DB, emailId: number): Promise<IngestResul
       .where(eq(inboxEmails.id, emailId));
     return { emailId, status: r.status, transactionIds: [], reason: r.reason };
   }
-  const rec = await recordParsed(db, r.parsed, { emailId });
+  const rec = await recordParsed(db, r.parsed, { emailId, subject: email.subject });
   const status = rec.status === "duplicate" ? "duplicate" : rec.status;
   await db
     .update(inboxEmails)

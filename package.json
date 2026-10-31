@@ -12,7 +12,9 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "local": "npm run build && tsx scripts/local-server.ts",
+    "local:demo": "npm run build && tsx scripts/local-server.ts --demo"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
@@ -26,6 +28,7 @@
     "@cloudflare/vite-plugin": "^1.66.0",
     "@cloudflare/workers-types": "^5.20261031.1",
     "@electric-sql/pglite": "^0.5.14",
+    "@hono/node-server": "^2.1.5",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
