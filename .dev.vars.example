@@ -1,0 +1,5 @@
+# Salin ke .dev.vars untuk development lokal (jangan di-commit)
+DATABASE_URL=postgresql://user:password@ep-xxxx.ap-southeast-1.aws.neon.tech/montrack?sslmode=require
+APP_PASSWORD=ganti-dengan-password-kuat
+SESSION_SECRET=ganti-dengan-string-acak-panjang
+INGEST_SECRET=ganti-dengan-string-acak-lain
