@@ -132,3 +132,83 @@ No. Transaksi: SPAY998877`,
     body: "Pembayaran Rp20.000 ke Toko X gagal.",
   },
 };
+
+/**
+ * Struktur email wondr by BNI (Nov 2026). Semua nilai (nama, merchant, lokasi,
+ * nomor rekening/referensi, nominal) adalah REKAAN; hanya susunan labelnya yang asli.
+ */
+export const WONDR = {
+  qris: {
+    from: "wondr by BNI <wondr@bni.co.id>",
+    subject: "Transaksi berhasil!",
+    body: `Transaksi berhasil!
+Hai, NAMA PEMILIK
+Terima kasih udah bertransaksi dengan wondr by BNI! Kamu baru aja bayar pakai QRIS dengan detail sebagai berikut:
+Penerima
+9XY9 MPM TOKO CONTOH SEJAHTERA
+KOTA CONTOH, 12345, ID
+Sumber dana
+NAMA PEMILIK
+TAPLUS • ******999
+Tanggal & waktu transaksi
+Tanggal
+11 Okt 2026
+Waktu
+21:33:37 WIB
+Detail pembayaran
+Nominal
+Rp11.300
+Total
+Rp11.300
+Detail merchant
+Merchant ID
+111111111111111
+Merchant PAN
+2222222222222222222
+Terminal ID
+A01
+Nama acquirer
+BANK CONTOH
+Detail transaksi
+Customer PAN
+3333333333333333333
+Nama issuer
+BNI
+Jenis transaksi
+QRIS
+Reference ID
+20261011000000000001
+Kode RRN
+abc000000001
+Butuh bantuan?`,
+  },
+  topup: {
+    from: "wondr by BNI <wondr@bni.co.id>",
+    subject: "Top-up berhasil!",
+    body: `Top-up berhasil!
+Hai, NAMA PEMILIK
+Terima kasih udah memilih wondr by BNI untuk transaksi kamu! Kamu baru aja top-up e-Wallet dengan detail sebagai berikut:
+Penerima
+NAMA PEMILIK
+GoPay • 62*******0000
+Sumber dana
+NAMA PEMILIK
+TAPLUS • ******999
+Tanggal & waktu top-up
+Tanggal
+06 Oktober 2026
+Waktu
+08:04:16 WIB
+Detail top-up
+Nominal
+Rp50.000
+Biaya transaksi
+Rp1.000
+Total
+Rp51.000
+Lainnya
+Ref ID
+20261006000000000002
+Biaya transaksi sudah termasuk PPN (bila ada).`,
+  },
+};

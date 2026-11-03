@@ -60,7 +60,7 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
         </div>
         <div>
           <label className="label" htmlFor="owners">Nama pemilik rekening</label>
-          <input id="owners" className="input" placeholder="mis. Fajar Aji, FAJAR A" value={owners} onChange={(e) => setOwners(e.target.value)} />
+          <input id="owners" className="input" placeholder="mis. Budi Santoso, BUDI S" value={owners} onChange={(e) => setOwners(e.target.value)} />
           <p className="mt-1 text-xs text-stone-500">
             Transfer ke/dari nama ini dianggap pindah uang antar rekening sendiri (bukan pengeluaran). Pisahkan dengan koma.
           </p>

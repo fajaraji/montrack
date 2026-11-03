@@ -100,8 +100,9 @@ const DATE_LABELS = [
 ];
 const REF_LABELS = [
   "No. Referensi", "Nomor Referensi", "No Referensi", "No. Ref", "No Ref", "Ref No", "Reference No",
-  "Reference Number", "ID Transaksi", "Transaction ID", "Order ID", "No. Transaksi", "Nomor Transaksi", "Referensi",
+  "Reference Number", "Reference ID", "Ref ID", "ID Transaksi", "Transaction ID", "Order ID", "No. Transaksi", "Nomor Transaksi", "Referensi", "Kode RRN", "RRN",
 ];
+const TIME_LABELS = ["Waktu", "Jam", "Pukul", "Time"];
 const SOURCE_LABELS = ["Rekening Sumber", "Sumber Dana", "Dari Rekening", "Rekening Debet", "Nomor Rekening", "Source of Fund", "No. Rekening"];
 
 const IGNORE_SUBJECT = /\b(otp|kode verifikasi|verification code|kode keamanan|login|masuk ke akun|perangkat baru|new device|ubah pin|reset password|kata sandi|e-?statement|rekening koran|laporan bulanan|newsletter|promo|diskon|voucher spesial|cashback hingga|hemat hingga|survey|survei|undian|terms|syarat dan ketentuan|kebijakan privasi)\b/i;
@@ -135,6 +136,9 @@ function extractLast4(s: string | null): string | null {
 function cleanName(s: string | null): string | null {
   if (!s) return null;
   const v = s
+    // kode terminal QRIS di depan nama merchant, mis. "9XY9 MPM TOKO ..."
+    .replace(/^(?:[A-Z0-9]*\d[A-Z0-9]*\s+)?MPM\s+/i, "")
+    .replace(/_+/g, " ")
     .replace(/(?:Rp\.?|IDR)\s*[\d.,]+/gi, "")
     .replace(/\s{2,}/g, " ")
     .replace(/^[-:•\s]+|[-:•\s]+$/g, "")
@@ -198,7 +202,12 @@ export function parseEmail(input: EmailInput): ParseResult {
   }
   if (fee >= amount) fee = 0;
 
-  const dateStr = findField(lines, DATE_LABELS, { valuePattern: /\d/ });
+  let dateStr = findField(lines, DATE_LABELS, { valuePattern: /\d/ });
+  // Tanggal dan jam di baris terpisah (mis. wondr BNI: "Tanggal" ⏎ "11 Okt 2026", "Waktu" ⏎ "21:33:37 WIB").
+  if (dateStr && !/\d{1,2}[:.]\d{2}/.test(dateStr)) {
+    const time = findField(lines, TIME_LABELS, { valuePattern: /^\d{1,2}[:.]\d{2}/ });
+    if (time) dateStr = `${dateStr} ${time}`;
+  }
   let occurredAt = parseIndoDate(dateStr);
   if (!occurredAt || Math.abs(occurredAt.getTime() - input.date.getTime()) > 40 * 86400_000) {
     if (dateStr) notes.push("Tanggal di email tidak terbaca, memakai waktu email.");

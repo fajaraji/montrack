@@ -24,6 +24,8 @@ export function toLines(text: string): string[] {
     .filter(Boolean);
 }
 
+const SUB_LABEL = /^(id|pan|code|kode|name|nama|transaksi|top-?up|ref|rrn|number|no\.?|type|jenis|merchant|acquirer|issuer)\b/i;
+
 function escapeRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -39,6 +41,8 @@ export function findField(lines: string[], labels: string[], opts: { valuePatter
     for (let i = 0; i < lines.length; i++) {
       const m = lines[i].match(re);
       if (!m) continue;
+      // "Merchant ID", "Merchant PAN", "Tanggal & waktu transaksi" adalah label lain, bukan "Merchant"/"Tanggal & Waktu".
+      if (SUB_LABEL.test(m[1]) && !/^[^:：]*[:：]/.test(lines[i].slice(label.length))) continue;
       const candidates = [m[1], lines[i + 1], lines[i + 2]].filter((v): v is string => !!v && !!v.trim());
       for (const c of candidates) {
         const v = c.replace(/^[:：\-=]\s*/, "").trim();

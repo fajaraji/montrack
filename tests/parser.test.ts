@@ -3,7 +3,7 @@ import { parseEmail, type ParsedEmail } from "../src/worker/parsers/email";
 import { parseIndoDate } from "../src/worker/parsers/date";
 import { parseRupiah } from "../src/shared/money";
 import { wibParts } from "../src/shared/time";
-import { EMAILS } from "./fixtures";
+import { EMAILS, WONDR } from "./fixtures";
 
 const date = new Date("2026-10-31T06:00:00Z");
 function parse(e: { from: string; subject: string; body: string }): ParsedEmail {
@@ -97,5 +97,18 @@ describe("parseEmail", () => {
   it("pengirim tak dikenal → unparsed", () => {
     const r = parseEmail({ from: "x@example.com", subject: "Halo", body: "Rp 10.000", date });
     expect(r).toMatchObject({ ok: false, status: "unparsed" });
+  });
+});
+
+describe("format asli wondr by BNI", () => {
+  it("QRIS: merchant dari Penerima, jam dari baris Waktu, Reference ID", () => {
+    const p = parse(WONDR.qris);
+    expect(p).toMatchObject({ provider: "bni", kind: "expense", amount: 11300, fee: 0, merchant: "TOKO CONTOH SEJAHTERA", reference: "20261011000000000001", confidence: "high" });
+    expect(wibParts(p.occurredAt)).toMatchObject({ year: 2026, month: 10, day: 11, hour: 21, minute: 33 });
+  });
+  it("top-up GoPay dengan biaya transaksi", () => {
+    const p = parse(WONDR.topup);
+    expect(p).toMatchObject({ provider: "bni", kind: "topup_out", target: "gopay", amount: 50000, fee: 1000, reference: "20261006000000000002" });
+    expect(wibParts(p.occurredAt)).toMatchObject({ day: 6, hour: 8, minute: 4 });
   });
 });
