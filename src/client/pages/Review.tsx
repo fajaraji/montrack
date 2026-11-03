@@ -1,28 +1,40 @@
 import { useState } from "react";
 import { api } from "../lib/api";
 import { useAsync, useStore } from "../lib/store";
-import { Empty, ErrorNote, PageHeader, Sheet, Spinner } from "../components/ui";
-import { CategoryGrid, TxAmount, TxForm, txTitle } from "../components/tx";
+import { Empty, ErrorNote, PageHeader, Sheet, Spinner, useToast } from "../components/ui";
+import { CategoryGrid, TxAmount, TxForm, txTitle, undoAction } from "../components/tx";
 import { wibParts, MONTHS_ID } from "../../shared/time";
-import { providerLabel, type InboxEmailDTO, type SettingsDTO, type TransactionDTO } from "../../shared/types";
+import { providerLabel, type InboxEmailDTO, type SettingsDTO, type TransactionDTO, type UndoPayload } from "../../shared/types";
 
-function ReviewCard({ t, onDone, onEdit }: { t: TransactionDTO; onDone: (msg: string) => void; onEdit: () => void }) {
-  const { account, bump } = useStore();
+function ReviewCard({
+  t,
+  onDone,
+  onEdit,
+}: {
+  t: TransactionDTO;
+  onDone: (msg: string, undo?: UndoPayload) => void;
+  onEdit: () => void;
+}) {
+  const { account, category, bump } = useStore();
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const p = wibParts(new Date(t.occurredAt));
   const kind = t.type === "income" ? "income" : "expense";
 
-  async function pick(categoryId: number) {
+  async function pick(categoryId: number, categoryName?: string) {
     setBusy(true);
     try {
-      const r = await api<{ learned: number }>(`/transactions/${t.id}`, {
+      const r = await api<{ learned: number; undo: UndoPayload }>(`/transactions/${t.id}`, {
         method: "PATCH",
         body: { categoryId, status: "ok", remember: remember && !!(t.merchant || t.description) },
       });
       bump();
-      onDone(r.learned > 0 ? `Tersimpan, dan ${r.learned} transaksi serupa ikut dikategorikan.` : "Tersimpan.");
+      const name = categoryName ?? category(categoryId)?.name ?? "kategori";
+      onDone(
+        r.learned > 0 ? `Masuk ${name}, ${r.learned} transaksi serupa ikut.` : `Masuk ${name}.`,
+        r.undo,
+      );
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
@@ -36,7 +48,7 @@ function ReviewCard({ t, onDone, onEdit }: { t: TransactionDTO; onDone: (msg: st
     setBusy(true);
     try {
       const out = t.type === "expense";
-      await api(`/transactions/${t.id}`, {
+      const r = await api<{ undo: UndoPayload }>(`/transactions/${t.id}`, {
         method: "PATCH",
         body: {
           type: "transfer",
@@ -54,7 +66,7 @@ function ReviewCard({ t, onDone, onEdit }: { t: TransactionDTO; onDone: (msg: st
         }
       }
       bump();
-      onDone("Dicatat sebagai transfer antar rekeningmu. Nama ini diingat untuk berikutnya.");
+      onDone("Dicatat sebagai transfer antar rekeningmu.", r.undo);
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
@@ -81,7 +93,7 @@ function ReviewCard({ t, onDone, onEdit }: { t: TransactionDTO; onDone: (msg: st
       {t.type === "expense" || t.type === "income" ? (
         <>
           <div className={busy ? "pointer-events-none opacity-50" : ""}>
-            <CategoryGrid kind={kind} value={t.categoryId} onPick={(c) => pick(c.id)} />
+            <CategoryGrid kind={kind} value={t.categoryId} onPick={(c) => pick(c.id, c.name)} />
           </div>
           <div className="flex items-center justify-between gap-2 text-sm">
             <label className="flex items-center gap-2">
@@ -99,9 +111,9 @@ function ReviewCard({ t, onDone, onEdit }: { t: TransactionDTO; onDone: (msg: st
           <button
             className="btn-primary"
             onClick={async () => {
-              await api(`/transactions/${t.id}`, { method: "PATCH", body: { status: "ok" } });
+              const r = await api<{ undo: UndoPayload }>(`/transactions/${t.id}`, { method: "PATCH", body: { status: "ok" } });
               bump();
-              onDone("Ditandai sudah benar.");
+              onDone("Ditandai sudah benar.", r.undo);
             }}
           >
             Sudah benar
@@ -155,23 +167,21 @@ function EmailItem({ e, onChanged }: { e: InboxEmailDTO; onChanged: (msg: string
 }
 
 export function Review() {
-  const { version } = useStore();
+  const { version, bump } = useStore();
   const [editing, setEditing] = useState<TransactionDTO | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const { toastEl, showToast } = useToast();
   const txs = useAsync(() => api<TransactionDTO[]>("/transactions?status=review&limit=200"), [version]);
   const emails = useAsync(() => api<InboxEmailDTO[]>("/inbox?status=unparsed"), [version]);
-  const say = (m: string) => {
-    setToast(m);
-    setTimeout(() => setToast(null), 3000);
-  };
+  const say = (m: string, undo?: UndoPayload) => showToast(m, undoAction(undo, bump));
 
   return (
     <div className="space-y-4">
       <PageHeader title="Perlu ditinjau" />
       <p className="text-sm text-stone-500">
-        Pilih kategori sekali, Montrack akan mengingatnya untuk merchant yang sama berikutnya.
+        Pilih kategori sekali, Montrack akan mengingatnya untuk merchant yang sama berikutnya. Salah pilih? Ketuk{" "}
+        <b>Batalkan</b> di notifikasi bawah, atau ubah kapan saja lewat menu <b>Transaksi</b>.
       </p>
-      {toast && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">{toast}</p>}
+      {toastEl}
       <ErrorNote message={txs.error} />
       {txs.loading && !txs.data ? (
         <Spinner />
@@ -202,9 +212,9 @@ export function Review() {
           <TxForm
             key={editing.id}
             initial={editing}
-            onDone={(m) => {
+            onDone={(m, undo) => {
               setEditing(null);
-              say(m ?? "Tersimpan.");
+              say(m ?? "Tersimpan.", undo);
             }}
           />
         )}

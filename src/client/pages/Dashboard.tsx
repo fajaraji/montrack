@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "../lib/api";
 import { useAsync, useStore } from "../lib/store";
 import { Link, navigate } from "../lib/router";
-import { Money, MonthSwitcher, Spinner, ErrorNote, Sheet } from "../components/ui";
+import { Money, MonthSwitcher, Spinner, ErrorNote, Sheet, useToast } from "../components/ui";
 import { TxForm } from "../components/tx";
 import { formatRupiah, formatRupiahShort } from "../../shared/money";
 import { MONTHS_ID, parseYm, formatYm } from "../../shared/time";
@@ -74,7 +74,7 @@ export function Dashboard() {
   const { accounts, category, version, bump } = useStore();
   const [month, setMonth] = useState(formatYm(parseYm(null)));
   const [adding, setAdding] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const { toastEl, showToast } = useToast();
   const { data: s, error, loading } = useAsync(() => api<MonthSummaryDTO>(`/summary?month=${month}`), [month, version]);
   const active = accounts.filter((a) => !a.archived);
   const totalBalance = active.reduce((sum, a) => sum + a.balance, 0);
@@ -88,7 +88,7 @@ export function Dashboard() {
           + Catat
         </button>
       </div>
-      {toast && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">{toast}</p>}
+      {toastEl}
       <ErrorNote message={error} />
       {loading && !s && <Spinner />}
       {s && (
@@ -236,8 +236,7 @@ export function Dashboard() {
           onDone={(msg) => {
             setAdding(false);
             bump();
-            setToast(msg ?? "Tersimpan.");
-            setTimeout(() => setToast(null), 3000);
+            showToast(msg ?? "Tersimpan.");
           }}
         />
       </Sheet>

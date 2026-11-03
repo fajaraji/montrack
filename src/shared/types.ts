@@ -119,3 +119,21 @@ export interface ImportResultDTO {
   skipped: number;
   rows: { index: number; result: "inserted" | "matched" | "skipped"; transactionId: number | null }[];
 }
+
+/** Keadaan sebelum perubahan, dikirim balik ke POST /api/undo untuk membatalkan. */
+export interface UndoPayload {
+  transactions: {
+    id: number;
+    type?: string;
+    amount?: number;
+    accountId?: number | null;
+    toAccountId?: number | null;
+    categoryId?: number | null;
+    merchant?: string | null;
+    description?: string | null;
+    occurredAt?: string;
+    status?: string;
+  }[];
+  /** categoryId null = aturan belum ada sebelumnya → dihapus */
+  rule: { pattern: string; categoryId: number | null } | null;
+}

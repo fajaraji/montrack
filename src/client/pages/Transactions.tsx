@@ -2,15 +2,15 @@ import { useState } from "react";
 import { api } from "../lib/api";
 import { useAsync, useStore } from "../lib/store";
 import { navigate, useLocation } from "../lib/router";
-import { MonthSwitcher, Sheet, Spinner, Empty, ErrorNote, PageHeader } from "../components/ui";
-import { TxForm, TxList, TYPE_LABEL } from "../components/tx";
+import { MonthSwitcher, Sheet, Spinner, Empty, ErrorNote, PageHeader, useToast } from "../components/ui";
+import { TxForm, TxList, TYPE_LABEL, undoAction } from "../components/tx";
 import { formatRupiah } from "../../shared/money";
 import { formatYm, parseYm } from "../../shared/time";
-import type { TransactionDTO, TxType } from "../../shared/types";
+import type { TransactionDTO, TxType, UndoPayload } from "../../shared/types";
 
 export function Transactions() {
   const { search } = useLocation();
-  const { accounts, categories, version } = useStore();
+  const { accounts, categories, version, bump } = useStore();
   const month = search.get("month") ?? formatYm(parseYm(null));
   const type = search.get("type") ?? "";
   const accountId = search.get("accountId") ?? "";
@@ -18,7 +18,7 @@ export function Transactions() {
   const [q, setQ] = useState(search.get("q") ?? "");
   const [editing, setEditing] = useState<TransactionDTO | null>(null);
   const [adding, setAdding] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const { toastEl, showToast } = useToast();
 
   const setParam = (k: string, v: string) => {
     const p = new URLSearchParams(location.search);
@@ -37,13 +37,10 @@ export function Transactions() {
 
   const expense = (data ?? []).filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
   const income = (data ?? []).filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const done = (msg?: string) => {
+  const done = (msg?: string, undo?: UndoPayload) => {
     setEditing(null);
     setAdding(false);
-    if (msg) {
-      setToast(msg);
-      setTimeout(() => setToast(null), 3500);
-    }
+    if (msg) showToast(msg, undoAction(undo, bump));
   };
 
   return (
@@ -81,7 +78,7 @@ export function Transactions() {
           ))}
         </select>
       </div>
-      {toast && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">{toast}</p>}
+      {toastEl}
       <ErrorNote message={error} />
       {data && data.length > 0 && (
         <p className="text-sm text-stone-500">

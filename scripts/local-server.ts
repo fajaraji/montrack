@@ -2,7 +2,9 @@
  * Jalankan Montrack sepenuhnya di laptop tanpa Neon/Cloudflare:
  *   npm run local          (data disimpan di folder .local-db)
  *   npm run local:demo     (isi contoh transaksi bulan ini)
- * Password default: montrack (ubah lewat APP_PASSWORD).
+ * Password default: montrack (ubah lewat LOCAL_APP_PASSWORD).
+ * Sengaja TIDAK membaca APP_PASSWORD/SESSION_SECRET/INGEST_SECRET dari environment,
+ * agar secret produksi tidak terpakai atau tercetak saat mencoba di laptop.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { serve } from "@hono/node-server";
@@ -28,9 +30,9 @@ await seedDefaults(db);
 
 const env: Bindings = {
   DATABASE_URL: "pglite",
-  APP_PASSWORD: process.env.APP_PASSWORD ?? "montrack",
-  SESSION_SECRET: process.env.SESSION_SECRET ?? "local-session-secret-not-for-production",
-  INGEST_SECRET: process.env.INGEST_SECRET ?? "local-ingest-secret",
+  APP_PASSWORD: process.env.LOCAL_APP_PASSWORD ?? "montrack",
+  SESSION_SECRET: "local-session-secret-not-for-production",
+  INGEST_SECRET: "local-ingest-secret",
 };
 
 if (process.argv.includes("--demo")) {
@@ -85,4 +87,6 @@ app.get("*", (c) => {
 
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: (req) => app.fetch(req, env), port });
-console.log(`Montrack lokal: http://localhost:${port}  (password: ${env.APP_PASSWORD})`);
+console.log(
+  `Montrack lokal: http://localhost:${port}  (password: ${process.env.LOCAL_APP_PASSWORD ? "dari LOCAL_APP_PASSWORD" : "montrack"})`,
+);

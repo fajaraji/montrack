@@ -177,3 +177,48 @@ describe("impor mutasi", () => {
     expect(s.income).toBe(1234);
   });
 });
+
+describe("salah pilih kategori: batalkan & koreksi", () => {
+  async function setup() {
+    const acc = (await call<{ id: number }>("POST", "/accounts", { name: "BNI", provider: "bni" })).json.id;
+    const mk = async (merchant: string) =>
+      (await call<{ transaction: TransactionDTO }>("POST", "/transactions", {
+        type: "expense", amount: 15000, accountId: acc, merchant, occurredAt: "2026-10-10T05:00:00Z", status: "review",
+      })).json.transaction;
+    const cats = (await call<CategoryDTO[]>("GET", "/categories")).json;
+    return {
+      a: await mk("WARKOP BU TINI 01"), b: await mk("WARKOP BU TINI"), c: await mk("WARKOP BU TINI CABANG"),
+      lainnya: cats.find((x) => x.name === "Lainnya")!, makan: cats.find((x) => x.name === "Makan & Minum")!,
+    };
+  }
+  const byId = async () => new Map((await call<TransactionDTO[]>("GET", "/transactions")).json.map((t) => [t.id, t]));
+
+  it("Batalkan mengembalikan transaksi, transaksi serupa, dan menghapus aturan yang baru dipelajari", async () => {
+    const { a, b, c, lainnya } = await setup();
+    const r = await call<{ learned: number; undo: unknown }>("PATCH", `/transactions/${a.id}`, { categoryId: lainnya.id, status: "ok", remember: true });
+    expect(r.json.learned).toBe(2);
+    expect((await call<{ pattern: string }[]>("GET", "/rules")).json.some((x) => x.pattern === "warkop bu tini")).toBe(true);
+
+    await call("POST", "/undo", r.json.undo);
+    const m = await byId();
+    for (const t of [a, b, c]) expect(m.get(t.id)).toMatchObject({ categoryId: null });
+    expect(m.get(a.id)?.status).toBe("review");
+    expect((await call<{ pattern: string }[]>("GET", "/rules")).json.some((x) => x.pattern === "warkop bu tini")).toBe(false);
+  });
+
+  it("koreksi kategori + ingat ikut memperbaiki transaksi yang dulu kena aturan salah", async () => {
+    const { a, b, c, lainnya, makan } = await setup();
+    await call("PATCH", `/transactions/${a.id}`, { categoryId: lainnya.id, remember: true });
+    // Sadar salah → ubah salah satunya ke Makan & Minum dengan "ingat"
+    const r = await call<{ learned: number }>("PATCH", `/transactions/${b.id}`, { categoryId: makan.id, remember: true });
+    expect(r.json.learned).toBe(2);
+    const m = await byId();
+    for (const t of [a, b, c]) expect(m.get(t.id)?.categoryId).toBe(makan.id);
+  });
+
+  it("kategori baru bisa dibuat dan dipakai", async () => {
+    const c = (await call<CategoryDTO>("POST", "/categories", { name: "Kursus", icon: "🎓", kind: "expense" })).json;
+    const ren = await call<CategoryDTO>("PATCH", `/categories/${c.id}`, { name: "Kursus & AI", icon: "🤖" });
+    expect(ren.json).toMatchObject({ name: "Kursus & AI", icon: "🤖" });
+  });
+});

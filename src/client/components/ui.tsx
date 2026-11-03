@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { formatRupiah } from "../../shared/money";
 import { MONTHS_ID, addMonths, formatYm, parseYm } from "../../shared/time";
 
@@ -83,4 +83,47 @@ export function PageHeader({ title, right }: { title: string; right?: ReactNode 
       {right}
     </div>
   );
+}
+
+export interface ToastAction {
+  label: string;
+  run: () => Promise<void> | void;
+}
+
+/** Notifikasi singkat di bawah layar, opsional dengan tombol aksi (mis. "Batalkan"). */
+export function useToast() {
+  const [toast, setToast] = useState<{ msg: string; action?: ToastAction; id: number } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const show = useCallback((msg: string, action?: ToastAction) => {
+    if (timer.current) clearTimeout(timer.current);
+    const id = Date.now();
+    setToast({ msg, action, id });
+    timer.current = setTimeout(() => setToast((t) => (t?.id === id ? null : t)), action ? 8000 : 3500);
+  }, []);
+  const [busy, setBusy] = useState(false);
+  const el = toast ? (
+    <div className="fixed inset-x-0 bottom-20 z-[60] flex justify-center px-4 md:bottom-6" role="status">
+      <div className="flex w-full max-w-lg items-center gap-3 rounded-2xl bg-stone-900 px-4 py-3 text-sm text-white shadow-lg dark:bg-stone-100 dark:text-stone-900">
+        <span className="flex-1">{toast.msg}</span>
+        {toast.action && (
+          <button
+            className="shrink-0 font-semibold text-brand-100 underline-offset-2 hover:underline disabled:opacity-50 dark:text-brand-700"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await toast.action!.run();
+              } finally {
+                setBusy(false);
+                setToast(null);
+              }
+            }}
+          >
+            {toast.action.label}
+          </button>
+        )}
+      </div>
+    </div>
+  ) : null;
+  return { toastEl: el, showToast: show };
 }

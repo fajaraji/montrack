@@ -1,4 +1,4 @@
-import { and, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { DB } from "../db/client";
 import { categoryRules, transactions } from "../db/schema";
 
@@ -55,32 +55,44 @@ export async function loadRules(db: DB): Promise<Rule[]> {
   return sortRules(rows);
 }
 
+export interface LearnResult {
+  pattern: string | null;
+  applied: number;
+  /** kategori aturan sebelumnya untuk pola ini (null = belum ada aturan) */
+  previousRuleCategoryId: number | null;
+  /** keadaan transaksi lain sebelum ikut diubah, untuk "Batalkan" */
+  changed: { id: number; categoryId: number | null; status: string }[];
+}
+
 /**
- * Simpan aturan dari koreksi pengguna lalu terapkan ke transaksi lain
- * yang belum berkategori dan merchant/deskripsinya cocok.
- * Mengembalikan jumlah transaksi lain yang ikut diperbarui.
+ * Simpan aturan dari koreksi pengguna lalu terapkan ke transaksi lain yang cocok:
+ * yang belum berkategori, ATAU yang dulu dikategorikan oleh aturan lama untuk pola
+ * yang sama (sehingga salah pilih bisa dikoreksi sekaligus).
  */
 export async function learnRule(
   db: DB,
   text: string | null | undefined,
   categoryId: number,
   opts: { exceptId?: number } = {},
-): Promise<{ pattern: string | null; applied: number }> {
+): Promise<LearnResult> {
   const pattern = merchantKey(text);
-  if (pattern.length < 3) return { pattern: null, applied: 0 };
+  const none: LearnResult = { pattern: null, applied: 0, previousRuleCategoryId: null, changed: [] };
+  if (pattern.length < 3) return none;
 
+  const [old] = await db.select().from(categoryRules).where(eq(categoryRules.pattern, pattern));
   await db
     .insert(categoryRules)
     .values({ pattern, categoryId, origin: "learned" })
     .onConflictDoUpdate({ target: categoryRules.pattern, set: { categoryId, origin: "learned" } });
 
   const like = `%${pattern.replace(/[%_\\]/g, (m) => `\\${m}`)}%`;
-  const updated = await db
-    .update(transactions)
-    .set({ categoryId, status: "ok", updatedAt: new Date() })
+  const oldCat = old && old.categoryId !== categoryId ? old.categoryId : null;
+  const targets = await db
+    .select({ id: transactions.id, categoryId: transactions.categoryId, status: transactions.status })
+    .from(transactions)
     .where(
       and(
-        isNull(transactions.categoryId),
+        oldCat != null ? or(isNull(transactions.categoryId), eq(transactions.categoryId, oldCat)) : isNull(transactions.categoryId),
         sql`${transactions.type} in ('expense','income')`,
         or(
           sql`lower(coalesce(${transactions.merchant}, '')) like ${like}`,
@@ -88,7 +100,12 @@ export async function learnRule(
         ),
         opts.exceptId ? sql`${transactions.id} <> ${opts.exceptId}` : undefined,
       ),
-    )
-    .returning({ id: transactions.id });
-  return { pattern, applied: updated.length };
+    );
+  if (targets.length) {
+    await db
+      .update(transactions)
+      .set({ categoryId, status: "ok", updatedAt: new Date() })
+      .where(inArray(transactions.id, targets.map((t) => t.id)));
+  }
+  return { pattern, applied: targets.length, previousRuleCategoryId: old?.categoryId ?? null, changed: targets };
 }

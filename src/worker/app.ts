@@ -17,7 +17,7 @@ export const MAX_EMAILS_PER_REQUEST = 4;
 import { importStatement } from "./services/importer";
 import { getSettings, updateSettings } from "./services/settings";
 import { monthRange, parseYm } from "../shared/time";
-import type { ImportRow, InboxEmailDTO, TransactionDTO } from "../shared/types";
+import type { ImportRow, InboxEmailDTO, TransactionDTO, UndoPayload } from "../shared/types";
 
 export interface Bindings {
   DATABASE_URL: string;
@@ -349,12 +349,85 @@ export function createApp(getDb: (env: Bindings) => DB) {
       .returning();
     let learned = 0;
     let pattern: string | null = null;
+    // Data untuk tombol "Batalkan": keadaan sebelum perubahan.
+    const undo: UndoPayload = {
+      transactions: [
+        {
+          id: existing.id,
+          type: existing.type,
+          amount: existing.amount,
+          accountId: existing.accountId,
+          toAccountId: existing.toAccountId,
+          categoryId: existing.categoryId,
+          merchant: existing.merchant,
+          description: existing.description,
+          occurredAt: existing.occurredAt.toISOString(),
+          status: existing.status,
+        },
+      ],
+      rule: null,
+    };
     if (b.remember && t.categoryId && (t.type === "expense" || t.type === "income")) {
       const r = await learnRule(c.var.db, t.merchant ?? t.description, t.categoryId, { exceptId: t.id });
       learned = r.applied;
       pattern = r.pattern;
+      undo.transactions.push(...r.changed);
+      if (r.pattern) undo.rule = { pattern: r.pattern, categoryId: r.previousRuleCategoryId };
     }
-    return c.json({ transaction: toDTO(t), learned, pattern });
+    return c.json({ transaction: toDTO(t), learned, pattern, undo });
+  });
+
+  /** Kembalikan transaksi (dan aturan yang ikut dipelajari) ke keadaan sebelum diubah. */
+  app.post("/undo", async (c) => {
+    const b = await c.req.json<UndoPayload>();
+    if (!Array.isArray(b.transactions) || b.transactions.length > 2000) throw bad("Data batalkan tidak valid");
+    // Transaksi yang hanya berubah kategori/status dikembalikan per kelompok (hemat query).
+    const simple = new Map<string, number[]>();
+    const full: UndoPayload["transactions"] = [];
+    for (const prev of b.transactions) {
+      const keys = Object.keys(prev).filter((k) => k !== "id");
+      if (keys.every((k) => k === "categoryId" || k === "status")) {
+        const cat = prev.categoryId == null ? null : int(prev.categoryId, "categoryId");
+        const status = prev.status === "ok" ? "ok" : "review";
+        const k = `${cat}|${status}`;
+        simple.set(k, [...(simple.get(k) ?? []), int(prev.id, "id")!]);
+      } else full.push(prev);
+    }
+    for (const [k, ids] of simple) {
+      const [cat, status] = k.split("|");
+      await c.var.db
+        .update(transactions)
+        .set({ categoryId: cat === "null" ? null : Number(cat), status, updatedAt: new Date() })
+        .where(inArray(transactions.id, ids));
+    }
+    for (const prev of full) {
+      const id = int(prev.id, "id")!;
+      const set: Partial<typeof transactions.$inferInsert> = { updatedAt: new Date() };
+      if (prev.type !== undefined) {
+        if (!TX_TYPES.includes(prev.type as never)) throw bad("type tidak valid");
+        set.type = prev.type;
+      }
+      if (prev.amount !== undefined) set.amount = int(prev.amount, "amount")!;
+      if (prev.accountId !== undefined) set.accountId = int(prev.accountId, "accountId", { nullable: true });
+      if (prev.toAccountId !== undefined) set.toAccountId = int(prev.toAccountId, "toAccountId", { nullable: true });
+      if (prev.categoryId !== undefined) set.categoryId = int(prev.categoryId, "categoryId", { nullable: true });
+      if (prev.merchant !== undefined) set.merchant = str(prev.merchant) ?? null;
+      if (prev.description !== undefined) set.description = str(prev.description, 500) ?? null;
+      if (prev.occurredAt !== undefined) set.occurredAt = new Date(prev.occurredAt);
+      if (prev.status === "ok" || prev.status === "review") set.status = prev.status;
+      await c.var.db.update(transactions).set(set).where(eq(transactions.id, id));
+    }
+    if (b.rule?.pattern) {
+      if (b.rule.categoryId == null) {
+        await c.var.db.delete(categoryRules).where(eq(categoryRules.pattern, b.rule.pattern));
+      } else {
+        await c.var.db
+          .update(categoryRules)
+          .set({ categoryId: int(b.rule.categoryId, "categoryId")! })
+          .where(eq(categoryRules.pattern, b.rule.pattern));
+      }
+    }
+    return c.json({ ok: true, restored: b.transactions.length });
   });
 
   app.post("/transactions/bulk", async (c) => {

@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { useStore } from "../lib/store";
-import { Money, ErrorNote } from "./ui";
+import { Money, ErrorNote, type ToastAction } from "./ui";
 import { formatRupiah, parseRupiah } from "../../shared/money";
 import { wibDateKey, wibParts, fromWib, MONTHS_ID } from "../../shared/time";
-import type { CategoryDTO, TransactionDTO, TxType } from "../../shared/types";
+import type { CategoryDTO, TransactionDTO, TxType, UndoPayload } from "../../shared/types";
 
 export const TYPE_LABEL: Record<TxType, string> = {
   expense: "Pengeluaran",
@@ -110,21 +110,72 @@ export function CategoryGrid({
   value: number | null;
   onPick: (c: CategoryDTO) => void;
 }) {
-  const { categories } = useStore();
+  const { categories, refresh } = useStore();
   const list = categories.filter((c) => c.kind === kind && !c.archived);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [icon, setIcon] = useState("🏷️");
+  const [error, setError] = useState<string | null>(null);
+
+  async function create() {
+    setError(null);
+    try {
+      const c = await api<CategoryDTO>("/categories", { body: { name, icon, kind } });
+      await refresh();
+      setAdding(false);
+      setName("");
+      onPick(c);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   return (
-    <div className="flex flex-wrap gap-2">
-      {list.map((c) => (
-        <button
-          type="button"
-          key={c.id}
-          onClick={() => onPick(c)}
-          className={`chip ${value === c.id ? "border-brand-600 bg-brand-50 font-medium text-brand-700 dark:bg-brand-900/40 dark:text-brand-100" : ""}`}
-        >
-          <span aria-hidden>{c.icon}</span>
-          {c.name}
-        </button>
-      ))}
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {list.map((c) => (
+          <button
+            type="button"
+            key={c.id}
+            onClick={() => onPick(c)}
+            className={`chip ${value === c.id ? "border-brand-600 bg-brand-50 font-medium text-brand-700 dark:bg-brand-900/40 dark:text-brand-100" : ""}`}
+          >
+            <span aria-hidden>{c.icon}</span>
+            {c.name}
+          </button>
+        ))}
+        {!adding && (
+          <button type="button" className="chip border-dashed text-brand-700 dark:text-brand-500" onClick={() => setAdding(true)}>
+            + Kategori baru
+          </button>
+        )}
+      </div>
+      {adding && (
+        <div className="flex gap-2">
+          <input className="input w-16 text-center" value={icon} onChange={(e) => setIcon(e.target.value)} aria-label="Ikon kategori" />
+          <input
+            className="input"
+            placeholder={kind === "expense" ? "mis. Kursus, AI, Hewan Peliharaan" : "mis. Jualan Online"}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (name.trim()) void create();
+              }
+            }}
+            aria-label="Nama kategori baru"
+            autoFocus
+          />
+          <button type="button" className="btn-primary" disabled={!name.trim()} onClick={create}>
+            Tambah
+          </button>
+          <button type="button" className="btn-ghost px-2" onClick={() => setAdding(false)} aria-label="Batal tambah kategori">
+            ✕
+          </button>
+        </div>
+      )}
+      <ErrorNote message={error} />
     </div>
   );
 }
@@ -141,7 +192,13 @@ function fromLocalInput(v: string): string {
 }
 
 /** Form tambah/ubah transaksi. */
-export function TxForm({ initial, onDone }: { initial?: TransactionDTO; onDone: (msg?: string) => void }) {
+export function TxForm({
+  initial,
+  onDone,
+}: {
+  initial?: TransactionDTO;
+  onDone: (msg?: string, undo?: UndoPayload) => void;
+}) {
   const { accounts, bump } = useStore();
   const active = accounts.filter((a) => !a.archived);
   const [type, setType] = useState<TxType>(initial?.type ?? "expense");
@@ -177,10 +234,10 @@ export function TxForm({ initial, onDone }: { initial?: TransactionDTO; onDone: 
         remember: remember && categoryChanged && !!merchant.trim(),
       };
       const r = initial
-        ? await api<{ learned: number }>(`/transactions/${initial.id}`, { method: "PATCH", body })
-        : await api<{ learned: number }>("/transactions", { body });
+        ? await api<{ learned: number; undo?: UndoPayload }>(`/transactions/${initial.id}`, { method: "PATCH", body })
+        : await api<{ learned: number; undo?: UndoPayload }>("/transactions", { body });
       bump();
-      onDone(r.learned > 0 ? `Kategori juga diterapkan ke ${r.learned} transaksi lain.` : undefined);
+      onDone(r.learned > 0 ? `Tersimpan. Kategori juga diterapkan ke ${r.learned} transaksi serupa.` : "Tersimpan.", r.undo);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -323,4 +380,16 @@ export function TxForm({ initial, onDone }: { initial?: TransactionDTO; onDone: 
       </div>
     </form>
   );
+}
+
+/** Aksi "Batalkan" untuk toast, mengembalikan perubahan lewat POST /api/undo. */
+export function undoAction(undo: UndoPayload | undefined, after: () => void): ToastAction | undefined {
+  if (!undo || !undo.transactions.length) return undefined;
+  return {
+    label: "Batalkan",
+    run: async () => {
+      await api("/undo", { body: undo });
+      after();
+    },
+  };
 }
