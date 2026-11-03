@@ -30,6 +30,9 @@ var SENDERS = [
 ];
 
 var SENT_KEY = 'sentIds';
+// Sama dengan batas server (MAX_EMAILS_PER_REQUEST): paket gratis Cloudflare
+// hanya mengizinkan 50 query database per request.
+var BATCH_SIZE = 4;
 var KEEP_DAYS = 10;
 
 function setup() {
@@ -80,7 +83,7 @@ function sync_(extra, maxThreads) {
           date: m.getDate().toISOString(),
           body: html.length > 0 ? html.slice(0, 200000) : m.getPlainBody(),
         });
-        if (batch.length >= 20) {
+        if (batch.length >= BATCH_SIZE) {
           total += post_(url, secret, batch, sent);
           batch = [];
         }
@@ -106,9 +109,21 @@ function post_(url, secret, emails, sent) {
     console.error('Gagal kirim (' + res.getResponseCode() + '): ' + res.getContentText().slice(0, 300));
     return 0;
   }
+  // Hanya tandai terkirim yang benar-benar diproses; "deferred"/"error" dicoba lagi nanti.
+  var results = [];
+  try { results = JSON.parse(res.getContentText()).results || []; } catch (e) {}
   var now = Date.now();
-  emails.forEach(function (e) { sent[e.messageId] = now; });
-  return emails.length;
+  var ok = 0;
+  results.forEach(function (r) {
+    if (r.status === 'deferred') return;
+    if (r.status === 'error') {
+      console.error('Gagal memproses ' + r.messageId + ': ' + r.reason);
+      return;
+    }
+    sent[r.messageId] = now;
+    ok++;
+  });
+  return ok;
 }
 
 function loadSent_(props) {

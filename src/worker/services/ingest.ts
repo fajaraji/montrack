@@ -1,11 +1,51 @@
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import type { DB } from "../db/client";
-import { inboxEmails, transactions, type NewTransaction, type Transaction } from "../db/schema";
+import { accounts, categories, inboxEmails, transactions, type Account, type InboxEmail, type NewTransaction, type Transaction } from "../db/schema";
 import { parseEmail, type ParsedEmail } from "../parsers/email";
 import { htmlToText, toLines } from "../parsers/text";
-import { categorize, categoryIdByName, loadRules, type Rule } from "./categorize";
-import { findOrCreateAccount } from "./accounts";
+import { categorize, loadRules, type Rule } from "./categorize";
 import { getSettings } from "./settings";
+import { PROVIDERS } from "../../shared/types";
+
+/**
+ * Cache per request. Cloudflare Workers (paket gratis) membatasi 50 subrequest per
+ * request, dan setiap query Neon = 1 subrequest. Data referensi (aturan, pengaturan,
+ * kategori, akun) dimuat sekali saja untuk semua email dalam satu kiriman.
+ */
+export class IngestContext {
+  private rules?: Rule[];
+  private owners?: string[];
+  private cats?: Map<string, number>;
+  private accs?: Account[];
+  constructor(private db: DB) {}
+
+  async getRules() {
+    return (this.rules ??= await loadRules(this.db));
+  }
+  async getOwners() {
+    return (this.owners ??= (await getSettings(this.db)).ownerNames);
+  }
+  async categoryId(name: string): Promise<number | null> {
+    if (!this.cats) {
+      const rows = await this.db.select({ id: categories.id, name: categories.name }).from(categories);
+      this.cats = new Map(rows.map((r) => [r.name, r.id]));
+    }
+    return this.cats.get(name) ?? null;
+  }
+  /** Akun untuk provider (prioritas 4 digit terakhir yang cocok); dibuat otomatis bila belum ada. */
+  async account(provider: string, last4?: string | null): Promise<Account> {
+    this.accs ??= await this.db.select().from(accounts).orderBy(accounts.id);
+    const rows = this.accs.filter((a) => a.provider === provider && !a.archived);
+    if (rows.length) return (last4 && rows.find((a) => a.last4 === last4)) || rows[0];
+    const def = PROVIDERS.find((x) => x.id === provider);
+    const [created] = await this.db
+      .insert(accounts)
+      .values({ name: def?.label ?? provider.toUpperCase(), provider, kind: def?.kind ?? "other", last4: last4 ?? null })
+      .returning();
+    this.accs.push(created);
+    return created;
+  }
+}
 
 export interface IngestEmailInput {
   messageId: string;
@@ -94,11 +134,12 @@ async function insertTx(db: DB, t: NewTransaction): Promise<Transaction | null> 
 export async function recordParsed(
   db: DB,
   p: ParsedEmail,
-  ctx: { emailId: number | null; rules?: Rule[]; owners?: string[]; subject?: string },
+  ctx: { emailId: number | null; subject?: string; cache?: IngestContext },
 ): Promise<{ status: "parsed" | "merged" | "duplicate"; ids: number[] }> {
-  const rules = ctx.rules ?? (await loadRules(db));
-  const owners = ctx.owners ?? (await getSettings(db)).ownerNames;
-  const account = await findOrCreateAccount(db, p.provider, p.last4);
+  const cache = ctx.cache ?? new IngestContext(db);
+  const rules = await cache.getRules();
+  const owners = await cache.getOwners();
+  const account = await cache.account(p.provider, p.last4);
   const review = p.confidence === "low";
   const base = {
     amount: p.amount,
@@ -118,7 +159,7 @@ export async function recordParsed(
     }
     case "income": {
       const categoryId =
-        categorize(rules, p.counterparty, p.merchant) ?? (await categoryIdByName(db, "Refund & Cashback"));
+        categorize(rules, p.counterparty, p.merchant) ?? (await cache.categoryId("Refund & Cashback"));
       main = { ...base, type: "income", accountId: account.id, merchant: p.counterparty, categoryId,
         status: review ? "review" : "ok" };
       break;
@@ -129,7 +170,7 @@ export async function recordParsed(
           description: "Transfer ke rekening sendiri", status: review ? "review" : "ok" };
       } else {
         const categoryId =
-          categorize(rules, p.counterparty) ?? (await categoryIdByName(db, "Transfer ke Orang Lain"));
+          categorize(rules, p.counterparty) ?? (await cache.categoryId("Transfer ke Orang Lain"));
         main = { ...base, type: "expense", accountId: account.id, merchant: p.counterparty, categoryId,
           description: "Transfer keluar", status: "review" };
       }
@@ -141,14 +182,14 @@ export async function recordParsed(
           description: "Transfer dari rekening sendiri", status: review ? "review" : "ok" };
       } else {
         const categoryId =
-          categorize(rules, p.counterparty) ?? (await categoryIdByName(db, "Transfer Masuk"));
+          categorize(rules, p.counterparty) ?? (await cache.categoryId("Transfer Masuk"));
         main = { ...base, type: "income", accountId: account.id, merchant: p.counterparty, categoryId,
           description: "Transfer masuk", status: review ? "review" : "ok" };
       }
       break;
     }
     case "topup_out": {
-      const target = await findOrCreateAccount(db, p.target!);
+      const target = await cache.account(p.target!);
       main = { ...base, type: "transfer", accountId: account.id, toAccountId: target.id,
         merchant: `Top up ${target.name}`, status: review ? "review" : "ok" };
       break;
@@ -160,7 +201,7 @@ export async function recordParsed(
       break;
     }
     case "withdraw": {
-      const cash = await findOrCreateAccount(db, "cash");
+      const cash = await cache.account("cash");
       main = { ...base, type: "transfer", accountId: account.id, toAccountId: cash.id,
         merchant: "Tarik tunai", status: review ? "review" : "ok" };
       break;
@@ -193,7 +234,7 @@ export async function recordParsed(
       accountId: account.id,
       merchant: "Biaya admin",
       description: main.merchant ? `Biaya untuk ${main.merchant}` : null,
-      categoryId: await categoryIdByName(db, "Biaya Bank & Admin"),
+      categoryId: await cache.categoryId("Biaya Bank & Admin"),
       occurredAt: p.occurredAt,
       source: "email",
       status: "ok",
@@ -211,7 +252,7 @@ function normalizeBody(body: string): string {
   return toLines(htmlToText(body)).join("\n");
 }
 
-export async function ingestEmail(db: DB, input: IngestEmailInput): Promise<IngestResult> {
+export async function ingestEmail(db: DB, input: IngestEmailInput, cache = new IngestContext(db)): Promise<IngestResult> {
   const receivedAt = new Date(input.date);
   const date = Number.isNaN(receivedAt.getTime()) ? new Date() : receivedAt;
   const [email] = await db
@@ -225,14 +266,21 @@ export async function ingestEmail(db: DB, input: IngestEmailInput): Promise<Inge
     })
     .onConflictDoNothing()
     .returning();
-  if (!email) return { emailId: null, status: "duplicate", transactionIds: [] };
-  return processEmail(db, email.id);
+  if (email) return processEmail(db, email, cache);
+  // Sudah pernah diterima. Kalau dulu gagal diproses (status masih "unparsed" tanpa catatan),
+  // proses ulang sekarang, bukan dianggap duplikat.
+  const [existing] = await db.select().from(inboxEmails).where(eq(inboxEmails.messageId, input.messageId));
+  if (existing && existing.status === "unparsed" && existing.note == null) return processEmail(db, existing, cache);
+  return { emailId: existing?.id ?? null, status: "duplicate", transactionIds: [] };
 }
 
 /** (Ulang) proses satu email yang sudah tersimpan. */
-export async function processEmail(db: DB, emailId: number): Promise<IngestResult> {
-  const [email] = await db.select().from(inboxEmails).where(eq(inboxEmails.id, emailId));
+export async function processEmail(db: DB, emailOrId: number | InboxEmail, cache = new IngestContext(db)): Promise<IngestResult> {
+  let email: InboxEmail | undefined;
+  if (typeof emailOrId === "number") [email] = await db.select().from(inboxEmails).where(eq(inboxEmails.id, emailOrId));
+  else email = emailOrId;
   if (!email) throw new Error("email tidak ditemukan");
+  const emailId = email.id;
   const r = parseEmail({ from: email.fromAddr, subject: email.subject, body: email.body, date: email.receivedAt });
   if (!r.ok) {
     await db
@@ -241,29 +289,42 @@ export async function processEmail(db: DB, emailId: number): Promise<IngestResul
       .where(eq(inboxEmails.id, emailId));
     return { emailId, status: r.status, transactionIds: [], reason: r.reason };
   }
-  const rec = await recordParsed(db, r.parsed, { emailId, subject: email.subject });
-  const status = rec.status === "duplicate" ? "duplicate" : rec.status;
+  const rec = await recordParsed(db, r.parsed, { emailId, subject: email.subject, cache });
   await db
     .update(inboxEmails)
     .set({
       status: rec.status === "merged" ? "merged" : rec.status === "duplicate" ? "ignored" : "parsed",
       provider: r.parsed.provider,
-      note: rec.status === "duplicate" ? "Transaksi sudah tercatat." : r.parsed.notes.join(" ") || null,
+      note: rec.status === "duplicate" ? "Transaksi sudah tercatat." : r.parsed.notes.join(" ") || "",
       transactionId: rec.ids[0] ?? null,
     })
     .where(eq(inboxEmails.id, emailId));
-  return { emailId, status, transactionIds: rec.ids };
+  return { emailId, status: rec.status, transactionIds: rec.ids };
 }
 
-export async function reprocessUnparsed(db: DB): Promise<{ processed: number; parsed: number }> {
+/** Proses ulang email "belum terbaca", sedikit demi sedikit agar tidak melewati batas subrequest. */
+export async function reprocessUnparsed(
+  db: DB,
+  limit = 5,
+  afterId = 0,
+): Promise<{ processed: number; parsed: number; remaining: number; lastId: number }> {
   const rows = await db
-    .select({ id: inboxEmails.id })
+    .select()
     .from(inboxEmails)
-    .where(sql`${inboxEmails.status} = 'unparsed'`);
+    .where(sql`${inboxEmails.status} = 'unparsed' and ${inboxEmails.id} > ${afterId}`)
+    .orderBy(inboxEmails.id)
+    .limit(limit + 1);
+  const batch = rows.slice(0, limit);
+  const cache = new IngestContext(db);
   let parsed = 0;
-  for (const r of rows) {
-    const res = await processEmail(db, r.id);
+  for (const r of batch) {
+    const res = await processEmail(db, r, cache);
     if (res.status === "parsed" || res.status === "merged") parsed++;
   }
-  return { processed: rows.length, parsed };
+  return {
+    processed: batch.length,
+    parsed,
+    remaining: rows.length > limit ? 1 : 0,
+    lastId: batch.length ? batch[batch.length - 1].id : afterId,
+  };
 }

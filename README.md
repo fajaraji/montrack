@@ -74,6 +74,8 @@ Aplikasi aktif di `https://montrack.<subdomain-kamu>.workers.dev`. Login dengan 
    - `MONTRACK_SECRET` = nilai `INGEST_SECRET`
 4. Pilih fungsi **`setup`**, klik **Run**, lalu izinkan akses. Fungsi ini memasang pemicu tiap 5 menit dan mengirim email 30 hari terakhir.
 
+Server memproses maksimal 4 email per kiriman, karena paket gratis Cloudflare Workers membatasi 50 query database per request. Sisanya ditandai `deferred` dan dikirim ulang otomatis. Kalau kamu memperbarui `Code.gs`, tempel versi baru lalu jalankan `setup` lagi.
+
 Akses Gmail tetap di akun Google-mu. Montrack tidak pernah memegang token Gmail; script hanya *mengirim* email dari pengirim yang terdaftar di `SENDERS`.
 
 ### 4. Pemakaian pertama

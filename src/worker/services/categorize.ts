@@ -1,6 +1,6 @@
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, isNull, or, sql } from "drizzle-orm";
 import type { DB } from "../db/client";
-import { categories, categoryRules, transactions } from "../db/schema";
+import { categoryRules, transactions } from "../db/schema";
 
 export interface Rule {
   pattern: string;
@@ -91,9 +91,4 @@ export async function learnRule(
     )
     .returning({ id: transactions.id });
   return { pattern, applied: updated.length };
-}
-
-export async function categoryIdByName(db: DB, name: string): Promise<number | null> {
-  const row = await db.select({ id: categories.id }).from(categories).where(eq(categories.name, name)).limit(1);
-  return row[0]?.id ?? null;
 }

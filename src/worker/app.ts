@@ -6,7 +6,14 @@ import { isLoggedIn, login, logout, requireIngestSecret, requireSession } from "
 import { monthSummary } from "./services/summary";
 import { listAccountsWithBalance } from "./services/balances";
 import { learnRule, merchantKey } from "./services/categorize";
-import { ingestEmail, processEmail, reprocessUnparsed, type IngestEmailInput } from "./services/ingest";
+import { IngestContext, ingestEmail, processEmail, reprocessUnparsed, type IngestEmailInput } from "./services/ingest";
+
+/**
+ * Batas email yang diproses per request. Paket gratis Cloudflare Workers mengizinkan
+ * 50 subrequest per request dan tiap query Neon dihitung satu; ±5–9 query per email.
+ * Email di atas batas dikembalikan sebagai "deferred" agar dikirim ulang Apps Script.
+ */
+export const MAX_EMAILS_PER_REQUEST = 4;
 import { importStatement } from "./services/importer";
 import { getSettings, updateSettings } from "./services/settings";
 import { monthRange, parseYm } from "../shared/time";
@@ -19,6 +26,14 @@ export interface Bindings {
   INGEST_SECRET: string;
 }
 export type AppEnv = { Bindings: Bindings; Variables: { db: DB } };
+
+/** Pesan error yang berguna: drizzle membungkus penyebab aslinya di `cause`. */
+function errorText(err: unknown): string {
+  const e = err as { message?: string; cause?: { message?: string } };
+  const cause = e?.cause?.message;
+  const msg = (e?.message ?? String(err)).split("\n")[0].slice(0, 160);
+  return cause ? `${cause} (${msg})` : msg;
+}
 
 class HttpError extends Error {
   constructor(public status: 400 | 404, message: string) {
@@ -116,7 +131,7 @@ export function createApp(getDb: (env: Bindings) => DB) {
   app.onError((err, c) => {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status);
     console.error(err);
-    return c.json({ error: err.message || "Terjadi kesalahan" }, 500);
+    return c.json({ error: errorText(err) || "Terjadi kesalahan" }, 500);
   });
 
   app.use("*", async (c, next) => {
@@ -147,10 +162,20 @@ export function createApp(getDb: (env: Bindings) => DB) {
     const body = await c.req.json<IngestEmailInput | { emails: IngestEmailInput[] }>();
     const list = "emails" in body ? body.emails : [body];
     if (!Array.isArray(list) || list.length > 100) throw bad("Maksimal 100 email per kiriman");
+    if (list.some((e) => !e?.messageId)) throw bad("messageId wajib");
+    const cache = new IngestContext(c.var.db);
     const results = [];
-    for (const e of list) {
-      if (!e?.messageId) throw bad("messageId wajib");
-      results.push(await ingestEmail(c.var.db, e));
+    for (const [i, e] of list.entries()) {
+      if (i >= MAX_EMAILS_PER_REQUEST) {
+        results.push({ messageId: e.messageId, status: "deferred" });
+        continue;
+      }
+      try {
+        results.push({ messageId: e.messageId, ...(await ingestEmail(c.var.db, e, cache)) });
+      } catch (err) {
+        console.error("ingest gagal", e.messageId, err);
+        results.push({ messageId: e.messageId, status: "error", reason: errorText(err) });
+      }
     }
     return c.json({ results });
   });
@@ -392,7 +417,7 @@ export function createApp(getDb: (env: Bindings) => DB) {
       .where(eq(inboxEmails.id, Number(c.req.param("id"))));
     return c.json({ ok: true });
   });
-  app.post("/inbox/reprocess-all", async (c) => c.json(await reprocessUnparsed(c.var.db)));
+  app.post("/inbox/reprocess-all", async (c) => c.json(await reprocessUnparsed(c.var.db, MAX_EMAILS_PER_REQUEST, Number(c.req.query("after")) || 0)));
 
   // Impor mutasi
   app.post("/import", async (c) => {

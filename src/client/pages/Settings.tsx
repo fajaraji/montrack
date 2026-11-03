@@ -93,7 +93,13 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
           <button
             className="text-brand-700 dark:text-brand-500"
             onClick={async () => {
-              await api("/inbox/reprocess-all", { method: "POST" });
+              // Server memproses beberapa email per panggilan; ulangi sampai habis.
+              let after = 0;
+              for (let i = 0; i < 200; i++) {
+                const r = await api<{ remaining: number; lastId: number }>(`/inbox/reprocess-all?after=${after}`, { method: "POST" });
+                after = r.lastId;
+                if (!r.remaining) break;
+              }
               bump();
             }}
           >
