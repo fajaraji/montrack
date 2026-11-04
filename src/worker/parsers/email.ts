@@ -27,6 +27,8 @@ export interface ParsedEmail {
   counterparty: string | null;
   /** provider e-wallet tujuan, untuk topup_out */
   target: string | null;
+  /** bank tujuan transfer (provider), bila terbaca, mis. "bsi", "jago" */
+  targetBank?: string | null;
   occurredAt: Date;
   reference: string | null;
   last4: string | null;
@@ -58,6 +60,8 @@ export const PROVIDER_DEFS: ProviderDef[] = [
   { id: "dana", from: /dana\.id|\bdana\b/i, body: /\bDANA\b/, ewallet: true },
   { id: "shopeepay", from: /shopeepay|shopee\.co\.id/i, body: /ShopeePay/i, ewallet: true },
   { id: "linkaja", from: /linkaja/i, body: /LinkAja/i, ewallet: true },
+  { id: "flip", from: /flip\.id|\bflip\b/i, ewallet: false },
+  { id: "jago", from: /jago\.com|\bjago\b/i, ewallet: false },
 ];
 
 const EWALLET_NAMES: [string, RegExp][] = [
@@ -174,6 +178,10 @@ export function parseEmail(input: EmailInput): ParseResult {
   if (!provider) {
     return { ok: false, status: "unparsed", provider: null, reason: "Pengirim tidak dikenali." };
   }
+  if (provider.id === "flip") {
+    // Format email Flip belum dikenali dari contoh asli; jangan ditebak agar tidak dobel dengan transfer BNI → Flip.
+    return { ok: false, status: "unparsed", provider: "flip", reason: "Format email Flip belum dikenali (menunggu contoh asli)." };
+  }
 
   const kindInfo = detectKind(`${input.subject}\n${text.slice(0, 1500)}`, provider.ewallet);
   if (!kindInfo) {
@@ -220,9 +228,11 @@ export function parseEmail(input: EmailInput): ParseResult {
   let merchant: string | null = null;
   let counterparty: string | null = null;
   let target: string | null = null;
+  let targetBank: string | null = null;
 
   if (kind === "transfer_out" || kind === "topup_out") {
     counterparty = cleanName(findField(lines, COUNTERPARTY_OUT_LABELS));
+    targetBank = detectTargetBank(lines);
   } else if (kind === "transfer_in" || kind === "topup_in") {
     counterparty = cleanName(findField(lines, COUNTERPARTY_IN_LABELS));
   } else if (kind === "expense") {
@@ -265,6 +275,7 @@ export function parseEmail(input: EmailInput): ParseResult {
       merchant,
       counterparty,
       target,
+      targetBank,
       occurredAt,
       reference,
       last4,
@@ -278,4 +289,24 @@ function cleanRef(s: string | null): string | null {
   if (!s) return null;
   const m = s.match(/[A-Za-z0-9-]{4,}/);
   return m ? m[0] : null;
+}
+
+/** Bank tujuan dari baris "NAMA BANK • nomor" (format wondr BNI dan sejenisnya). */
+const BANK_NAMES: [string, RegExp][] = [
+  ["jago", /\bjago\b/i],
+  ["bsi", /\bbsi\b|syariah indonesia/i],
+  ["bca", /\bbca\b|central asia/i],
+  ["bni", /\bbni\b|negara indonesia/i],
+  ["bri", /\bbri\b|rakyat indonesia/i],
+  ["mandiri", /mandiri/i],
+];
+export function bankFromText(s: string | null | undefined): string | null {
+  if (!s) return null;
+  return BANK_NAMES.find(([, re]) => re.test(s))?.[0] ?? null;
+}
+function detectTargetBank(lines: string[]): string | null {
+  const i = lines.findIndex((l) => /^(penerima|nama penerima|tujuan|rekening tujuan|bank tujuan)$/i.test(l));
+  const window = i >= 0 ? lines.slice(i + 1, i + 4) : lines;
+  const bankLine = window.find((l) => /•|\*{3,}|\d{6,}/.test(l) && /[a-z]/i.test(l));
+  return bankFromText(bankLine ?? findField(lines, ["Bank Tujuan", "Bank Penerima"]));
 }

@@ -212,3 +212,41 @@ Ref ID
 Biaya transaksi sudah termasuk PPN (bila ada).`,
   },
 };
+
+/** Struktur email transfer wondr BNI (nilai rekaan). */
+export const WONDR_TRANSFER = (name: string, bankLine: string, amount = "Rp100.000") => ({
+  from: "wondr by BNI <wondr@bni.co.id>",
+  subject: "Transfer berhasil!",
+  body: `Transfer berhasil!
+Hai, NAMA PEMILIK
+Penerima
+${name} -
+${bankLine}
+Sumber dana
+NAMA PEMILIK
+TAPLUS • ******999
+Tanggal & waktu transaksi
+Tanggal
+02 Nov 2026
+Waktu
+20:49:10 WIB
+Detail transaksi
+Nominal transaksi
+${amount}
+Biaya admin
+Rp2.500
+Total
+Rp102.500
+Metode transaksi
+Metode
+BI-FAST
+Lainnya
+Reference ID
+20261102000000000777`,
+});
+
+/** Contoh notifikasi Jago (dari screenshot pengguna, tanpa data pribadi). */
+export const JAGO_NOTIF = {
+  paid: { app: "Jago", title: "Jago", text: "You've paid Rp20.000 with GoPay Tabungan Transaction. Need help? Contact Tanya Jago at 1500 746." },
+  received: { app: "Jago", title: "Jago", text: "You've received Rp100.000 from NAMA PEMILIK" },
+};

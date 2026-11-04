@@ -556,7 +556,7 @@ export function TxForm({
       )}
 
       {initial && initial.source !== "manual" && (
-        <p className="text-xs text-stone-500">Sumber: {initial.source === "email" ? "email otomatis" : "impor mutasi"}</p>
+        <p className="text-xs text-stone-500">Sumber: {initial.source === "email" ? "email otomatis" : initial.source === "notification" ? "notifikasi HP" : "impor mutasi"}</p>
       )}
       <ErrorNote message={error} />
       <div className="flex gap-2">

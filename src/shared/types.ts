@@ -1,10 +1,11 @@
 export type TxType = "expense" | "income" | "transfer" | "adjustment";
-export type TxSource = "manual" | "email" | "import";
+export type TxSource = "manual" | "email" | "import" | "notification";
 export type TxStatus = "ok" | "review";
 export type AccountKind = "bank" | "ewallet" | "cash" | "other";
 
 export const PROVIDERS: { id: string; label: string; kind: AccountKind }[] = [
   { id: "bri", label: "BRI", kind: "bank" },
+  { id: "jago", label: "Jago", kind: "bank" },
   { id: "bni", label: "BNI", kind: "bank" },
   { id: "bsi", label: "BSI", kind: "bank" },
   { id: "bca", label: "BCA", kind: "bank" },

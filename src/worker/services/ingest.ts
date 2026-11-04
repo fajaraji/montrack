@@ -2,6 +2,7 @@ import { and, eq, gte, lte, sql } from "drizzle-orm";
 import type { DB } from "../db/client";
 import { accounts, categories, inboxEmails, transactions, type Account, type InboxEmail, type NewTransaction, type Transaction } from "../db/schema";
 import { parseEmail, type ParsedEmail } from "../parsers/email";
+import { parseNotification } from "../parsers/notification";
 import { htmlToText, toLines } from "../parsers/text";
 import { categorize, loadRules, type Rule } from "./categorize";
 import { applyRename, loadRenames, type Rename } from "./renames";
@@ -78,10 +79,10 @@ function isOwner(name: string | null, owners: string[]): boolean {
   });
 }
 
-function fingerprintOf(p: ParsedEmail, suffix = ""): string {
-  if (p.reference) return `email:${p.provider}:${p.reference}${suffix}`;
+function fingerprintOf(p: ParsedEmail, suffix = "", channel = "email"): string {
+  if (p.reference) return `${channel}:${p.provider}:${p.reference}${suffix}`;
   const minute = Math.floor(p.occurredAt.getTime() / 60000);
-  return `email:${p.provider}:${p.kind}:${p.amount}:${minute}:${(p.merchant ?? p.counterparty ?? "").toLowerCase()}${suffix}`;
+  return `${channel}:${p.provider}:${p.kind}:${p.amount}:${minute}:${(p.merchant ?? p.counterparty ?? "").toLowerCase()}${suffix}`;
 }
 
 /**
@@ -139,7 +140,7 @@ async function insertTx(db: DB, t: NewTransaction): Promise<Transaction | null> 
 export async function recordParsed(
   db: DB,
   p: ParsedEmail,
-  ctx: { emailId: number | null; subject?: string; cache?: IngestContext },
+  ctx: { emailId: number | null; subject?: string; cache?: IngestContext; source?: "email" | "notification" },
 ): Promise<{ status: "parsed" | "merged" | "duplicate"; ids: number[] }> {
   const cache = ctx.cache ?? new IngestContext(db);
   const rules = await cache.getRules();
@@ -149,9 +150,9 @@ export async function recordParsed(
   const base = {
     amount: p.amount,
     occurredAt: p.occurredAt,
-    source: "email" as const,
+    source: ctx.source ?? "email",
     emailId: ctx.emailId,
-    fingerprint: fingerprintOf(p),
+    fingerprint: fingerprintOf(p, "", ctx.source ?? "email"),
   };
 
   let main: NewTransaction;
@@ -171,8 +172,10 @@ export async function recordParsed(
     }
     case "transfer_out": {
       if (isOwner(p.counterparty, owners)) {
-        main = { ...base, type: "transfer", accountId: account.id, toAccountId: null, merchant: p.counterparty,
-          description: "Transfer ke rekening sendiri", status: review ? "review" : "ok" };
+        // Bank tujuan terbaca (mis. "JAGO SYARIAH • …") → langsung ke akun itu, saldo keduanya benar.
+        const dest = p.targetBank && p.targetBank !== p.provider ? await cache.account(p.targetBank) : null;
+        main = { ...base, type: "transfer", accountId: account.id, toAccountId: dest?.id ?? null, merchant: p.counterparty,
+          description: dest ? `Ke ${dest.name} (rekening sendiri)` : "Transfer ke rekening sendiri", status: review ? "review" : "ok" };
       } else {
         const categoryId =
           categorize(rules, p.counterparty) ?? (await cache.categoryId("Transfer ke Orang Lain"));
@@ -228,6 +231,15 @@ export async function recordParsed(
   const ids: number[] = [];
   let status: "parsed" | "merged" | "duplicate" = "parsed";
 
+  // Transaksi yang sama sudah masuk lewat saluran lain (email ↔ notifikasi HP)?
+  const twin = await findCrossChannel(db, main, ctx.source ?? "email");
+  if (twin) {
+    if (!twin.merchant && main.merchant) {
+      await db.update(transactions).set({ merchant: main.merchant, updatedAt: new Date() }).where(eq(transactions.id, twin.id));
+    }
+    return { status: "duplicate", ids: [twin.id] };
+  }
+
   if (main.type === "transfer") {
     const merged = await mergeTransfer(db, main);
     if (merged) {
@@ -250,10 +262,10 @@ export async function recordParsed(
       description: main.merchant ? `Biaya untuk ${main.merchant}` : null,
       categoryId: await cache.categoryId("Biaya Bank & Admin"),
       occurredAt: p.occurredAt,
-      source: "email",
+      source: ctx.source ?? "email",
       status: "ok",
       emailId: ctx.emailId,
-      fingerprint: fingerprintOf(p, ":fee"),
+      fingerprint: fingerprintOf(p, ":fee", ctx.source ?? "email"),
     });
     if (feeTx) ids.push(feeTx.id);
   }
@@ -295,7 +307,10 @@ export async function processEmail(db: DB, emailOrId: number | InboxEmail, cache
   else email = emailOrId;
   if (!email) throw new Error("email tidak ditemukan");
   const emailId = email.id;
-  const r = parseEmail({ from: email.fromAddr, subject: email.subject, body: email.body, date: email.receivedAt });
+  const isNotif = email.fromAddr.startsWith("notif:");
+  const r = isNotif
+    ? parseNotification({ app: email.fromAddr.slice(6), title: email.subject, text: email.body, date: email.receivedAt })
+    : parseEmail({ from: email.fromAddr, subject: email.subject, body: email.body, date: email.receivedAt });
   if (!r.ok) {
     await db
       .update(inboxEmails)
@@ -303,7 +318,7 @@ export async function processEmail(db: DB, emailOrId: number | InboxEmail, cache
       .where(eq(inboxEmails.id, emailId));
     return { emailId, status: r.status, transactionIds: [], reason: r.reason };
   }
-  const rec = await recordParsed(db, r.parsed, { emailId, subject: email.subject, cache });
+  const rec = await recordParsed(db, r.parsed, { emailId, subject: email.subject, cache, source: isNotif ? "notification" : "email" });
   await db
     .update(inboxEmails)
     .set({
@@ -341,4 +356,54 @@ export async function reprocessUnparsed(
     remaining: rows.length > limit ? 1 : 0,
     lastId: batch.length ? batch[batch.length - 1].id : afterId,
   };
+}
+
+const TWIN_WINDOW_MS = 20 * 60 * 1000;
+
+/**
+ * Cari transaksi kembar dari saluran lain: nominal sama, akun sama, arah sama, selisih ≤ 20 menit.
+ * Keluar: pengeluaran/transfer dari akun ini. Masuk: pemasukan ke akun ini atau transfer ke akun ini.
+ */
+async function findCrossChannel(db: DB, t: NewTransaction, source: string): Promise<Transaction | null> {
+  const at = t.occurredAt as Date;
+  const outgoing = t.type === "expense" || (t.type === "transfer" && t.accountId != null);
+  const acc = outgoing ? t.accountId : t.type === "transfer" ? t.toAccountId : t.accountId;
+  if (acc == null) return null;
+  const rows = await db
+    .select()
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.amount, t.amount),
+        gte(transactions.occurredAt, new Date(at.getTime() - TWIN_WINDOW_MS)),
+        lte(transactions.occurredAt, new Date(at.getTime() + TWIN_WINDOW_MS)),
+        sql`${transactions.source} in ('email','notification') and ${transactions.source} <> ${source}`,
+        outgoing
+          ? sql`${transactions.accountId} = ${acc} and ${transactions.type} in ('expense','transfer')`
+          : sql`((${transactions.type} = 'income' and ${transactions.accountId} = ${acc}) or (${transactions.type} = 'transfer' and ${transactions.toAccountId} = ${acc}))`,
+      ),
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export interface IngestNotificationInput {
+  id?: string;
+  app: string;
+  title?: string;
+  text: string;
+  time?: string | number;
+}
+
+/** Simpan notifikasi HP (dari MacroDroid) ke kotak masuk lalu proses. */
+export async function ingestNotification(db: DB, n: IngestNotificationInput, cache = new IngestContext(db)): Promise<IngestResult> {
+  const t = typeof n.time === "number" ? new Date(n.time) : n.time ? new Date(n.time) : new Date();
+  const date = Number.isNaN(t.getTime()) ? new Date() : t;
+  const app = String(n.app ?? "").slice(0, 60);
+  const text = String(n.text ?? "").slice(0, 2000);
+  const title = String(n.title ?? "").slice(0, 200);
+  const key = n.id ? String(n.id) : `${app}|${title}|${text}|${Math.floor(date.getTime() / 60000)}`;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key));
+  const messageId = `notif:${[...new Uint8Array(digest)].slice(0, 12).map((b) => b.toString(16).padStart(2, "0")).join("")}`;
+  return ingestEmail(db, { messageId, from: `notif:${app}`, subject: title, body: text, date }, cache);
 }

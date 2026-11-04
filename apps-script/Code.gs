@@ -27,6 +27,8 @@ var SENDERS = [
   'linkaja.id',
   'bca.co.id',
   'bankmandiri.co.id',
+  'flip.id',
+  'jago.com',
 ];
 
 var SENT_KEY = 'sentIds';

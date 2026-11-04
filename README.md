@@ -84,7 +84,20 @@ Server memproses maksimal 4 email per kiriman, karena paket gratis Cloudflare Wo
 
 Akses Gmail tetap di akun Google-mu. Montrack tidak pernah memegang token Gmail; script hanya *mengirim* email dari pengirim yang terdaftar di `SENDERS`.
 
-### 4. Notifikasi HP (opsional)
+### 4. Notifikasi HP → Montrack (untuk transaksi tanpa email, mis. Jago/GoPay Tabungan)
+Aplikasi web tidak bisa membaca notifikasi HP, jadi notifikasi diteruskan oleh **MacroDroid** (Play Store, versi gratis cukup):
+1. **Trigger**: *Notification* → *Notification Received* → pilih aplikasi (Jago, wondr by BNI, DANA, dll.) → *Any content*.
+2. **Action**: *Connectivity* → *HTTP Request*:
+   - Method `POST`, URL `https://montrack.<subdomain>.workers.dev/api/ingest/notification`
+   - Header `Authorization: Bearer <INGEST_SECRET>`
+   - Content type `application/json`, body:
+     `{"app":"[not_app_name]","title":"[not_title]","text":"[notification]"}`
+     (pilih teks bertanda kurung siku lewat tombol **…** / *Magic Text* agar namanya tepat)
+3. Izinkan *Notification access* untuk MacroDroid.
+
+Pembacaannya longgar (nominal "Rp…" + kata kunci bayar/terima/top up). Transaksi yang sama dari email dan notifikasi hanya dicatat sekali.
+
+### 5. Push notification ke HP (opsional)
 Buat kunci VAPID sekali:
 
 ```bash
@@ -93,7 +106,7 @@ npm run vapid
 
 Simpan kedua nilainya sebagai secret Worker (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`) lewat dashboard Cloudflare (**montrack → Settings → Variables and Secrets**, tipe *Secret*) atau `npx wrangler secret put`. Lalu di aplikasi: **Lainnya → Pengaturan → Aktifkan notifikasi**. Jadwal: setiap hari 20.00 WIB (anggaran & tagihan) dan Senin 08.00 WIB (rekap mingguan).
 
-### 5. Pemakaian pertama
+### 6. Pemakaian pertama
 1. **Lainnya → Pengaturan → Nama pemilik rekening**: isi namamu seperti yang tertulis di rekening. Transfer ke atau dari nama ini dicatat sebagai *transfer antar rekening sendiri*.
 2. **Akun**: akun BRI/BNI/GoPay dst. dibuat otomatis saat email pertama masuk. Klik **Sesuaikan** lalu isi saldo sebenarnya, supaya saldo akurat. Selisihnya dicatat sebagai *penyesuaian*, bukan pengeluaran.
 3. **Tinjau**: pilih kategori untuk transaksi yang belum dikenali, cukup sekali per merchant.

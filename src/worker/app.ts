@@ -6,7 +6,7 @@ import { isLoggedIn, login, logout, requireIngestSecret, requireSession } from "
 import { monthSummary } from "./services/summary";
 import { listAccountsWithBalance } from "./services/balances";
 import { learnRule, merchantKey } from "./services/categorize";
-import { IngestContext, ingestEmail, processEmail, reprocessUnparsed, type IngestEmailInput } from "./services/ingest";
+import { IngestContext, ingestEmail, ingestNotification, processEmail, reprocessUnparsed, type IngestEmailInput, type IngestNotificationInput } from "./services/ingest";
 
 /**
  * Batas email yang diproses per request. Paket gratis Cloudflare Workers mengizinkan
@@ -128,6 +128,21 @@ export function createApp(getDb: (env: Bindings) => DB) {
         console.error("ingest gagal", e.messageId, err);
         results.push({ messageId: e.messageId, status: "error", reason: errorText(err) });
       }
+    }
+    return c.json({ results });
+  });
+
+  /** Notifikasi HP yang diteruskan MacroDroid: { app, title, text, time }. */
+  app.post("/ingest/notification", requireIngestSecret, async (c) => {
+    const body = await c.req.json<IngestNotificationInput | { notifications: IngestNotificationInput[] }>().catch(() => null);
+    if (!body) throw bad("Body harus JSON");
+    const list = "notifications" in body ? body.notifications : [body];
+    if (!Array.isArray(list) || list.length > MAX_EMAILS_PER_REQUEST) throw bad(`Maksimal ${MAX_EMAILS_PER_REQUEST} notifikasi per kiriman`);
+    const cache = new IngestContext(c.var.db);
+    const results = [];
+    for (const n of list) {
+      if (!n?.text) throw bad("text wajib");
+      results.push(await ingestNotification(c.var.db, n, cache));
     }
     return c.json({ results });
   });
