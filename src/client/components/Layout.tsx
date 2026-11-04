@@ -55,7 +55,7 @@ export function Layout({
   const tools = (
     <div className="flex items-center gap-1">
       <button
-        className="flex size-10 items-center justify-center rounded-full bg-white text-stone-700 shadow-[0_1px_2px_rgba(16,16,20,0.06)] hover:bg-stone-50 dark:bg-[#18181b] dark:text-stone-200"
+        className="flex size-9 items-center justify-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white"
         onClick={() => {
           applyPrivacy(!privacy);
           setPrivacy(!privacy);
@@ -68,7 +68,7 @@ export function Layout({
       </button>
       <Link
         href="/notifikasi"
-        className="relative flex size-10 items-center justify-center rounded-full bg-white text-stone-700 shadow-[0_1px_2px_rgba(16,16,20,0.06)] hover:bg-stone-50 dark:bg-[#18181b] dark:text-stone-200"
+        className="relative flex size-9 items-center justify-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white"
         aria-label={`Notifikasi${unread ? `, ${unread} belum dibaca` : ""}`}
       >
         <Icon name="bell" />
@@ -79,9 +79,9 @@ export function Layout({
 
   return (
     <div className="mx-auto min-h-screen max-w-[1320px] md:flex md:gap-8 md:px-6">
-      <nav className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col py-6 md:flex" aria-label="Navigasi utama">
+      <nav className="sticky top-4 my-4 hidden h-[calc(100vh-2rem)] w-56 shrink-0 flex-col rounded-3xl border border-white/[0.08] bg-white/[0.03] p-3 backdrop-blur-xl md:flex" aria-label="Navigasi utama">
         <div className="mb-8 flex items-center gap-2 px-3">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-ink text-lg font-extrabold text-white dark:bg-white dark:text-ink">M</span>
+          <span className="logo size-9 text-lg">M</span>
           <span className="text-lg font-extrabold tracking-tight">Montrack</span>
         </div>
         {NAV.map((n) => (
@@ -90,8 +90,8 @@ export function Layout({
             href={n.href}
             className={`mb-1 flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm transition ${
               active(n.href)
-                ? "bg-ink font-semibold text-white dark:bg-white dark:text-ink"
-                : "text-stone-600 hover:bg-white dark:text-stone-300 dark:hover:bg-white/5"
+                ? "bg-white font-semibold text-black shadow-[0_8px_24px_-10px_rgba(255,255,255,0.5)]"
+                : "text-white/60 hover:bg-white/[0.06] hover:text-white"
             }`}
           >
             <Icon name={n.icon} />
@@ -105,12 +105,15 @@ export function Layout({
         }}>
           <Icon name="plus" className="size-4" /> Catat transaksi
         </button>
-        <div className="mt-auto px-1">{tools}</div>
+        <div className="mt-auto flex items-center justify-between px-1">
+          <span className="kbd">v3</span>
+          {tools}
+        </div>
       </nav>
-      <main className="min-w-0 flex-1 px-4 pt-3 pb-32 md:py-6">
-        <div className="mb-2 flex items-center justify-between md:hidden">
+      <main className="min-w-0 flex-1 px-4 pt-3 pb-36 md:py-6">
+        <div className="glass sticky top-2 z-30 mb-4 flex items-center justify-between rounded-full py-1.5 pr-1.5 pl-2 md:hidden">
           <span className="flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-xl bg-ink text-base font-extrabold text-white dark:bg-white dark:text-ink">M</span>
+            <span className="logo size-8 text-base">M</span>
             <span className="font-extrabold tracking-tight">Montrack</span>
           </span>
           {tools}
@@ -119,7 +122,7 @@ export function Layout({
       </main>
 
       <button
-        className="fixed right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 flex size-14 items-center justify-center rounded-2xl bg-ink text-white shadow-[0_10px_30px_-8px_rgba(17,17,20,0.6)] active:scale-95 md:hidden dark:bg-white dark:text-ink"
+        className="fixed right-4 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-40 flex size-14 items-center justify-center rounded-full bg-white text-black shadow-[0_0_0_1px_rgba(255,255,255,0.15),0_12px_40px_-8px_rgba(255,140,90,0.55)] active:scale-95 md:hidden"
         onClick={() => {
           setAddType(undefined);
           setAdding(true);
@@ -130,7 +133,7 @@ export function Layout({
       </button>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-1px_0_rgba(16,16,20,0.06)] backdrop-blur md:hidden dark:bg-[#121214]/95"
+        className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-40 rounded-full border border-white/10 bg-[#0f0f11]/75 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.8)] backdrop-blur-2xl md:hidden"
         aria-label="Navigasi utama"
       >
         <div className="mx-auto flex max-w-lg">
@@ -138,11 +141,11 @@ export function Layout({
             <Link
               key={n.href}
               href={n.href}
-              className={`relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] ${
-                active(n.href) ? "font-semibold text-ink dark:text-white" : "text-stone-400"
+              className={`relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] ${
+                active(n.href) ? "font-semibold text-white" : "text-white/45"
               }`}
             >
-              <span className={`flex h-7 w-12 items-center justify-center rounded-full ${active(n.href) ? "bg-brand-100 text-brand-700 dark:bg-brand-900/50 dark:text-brand-200" : ""}`}>
+              <span className={`flex h-7 w-11 items-center justify-center rounded-full ${active(n.href) ? "bg-white text-black" : ""}`}>
                 <Icon name={n.icon} />
               </span>
               {n.label}

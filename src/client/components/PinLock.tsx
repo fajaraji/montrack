@@ -44,32 +44,32 @@ export function PinLock({ onUnlock, onLoggedOut }: { onUnlock: () => void; onLog
   });
 
   return (
-    <div className="fixed inset-0 z-[70] flex flex-col items-center justify-center gap-6 bg-surface px-6 dark:bg-[#0c0c0e]">
+    <div className="fixed inset-0 z-[70] flex flex-col items-center justify-center gap-6 bg-[#09090b]/80 px-6 backdrop-blur-2xl">
       <div className="text-center">
-        <span className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-ink text-2xl font-extrabold text-white dark:bg-white dark:text-ink">M</span>
+        <span className="mx-auto mb-3 logo size-12 text-2xl">M</span>
         <p className="text-2xl font-extrabold tracking-tight">Montrack</p>
         <p className="mt-1 text-sm text-stone-500">Masukkan PIN</p>
       </div>
       <div className="flex gap-3" aria-label={`${pin.length} angka dimasukkan`}>
         {Array.from({ length: Math.max(4, pin.length) }, (_, i) => (
-          <span key={i} className={`size-3.5 rounded-full ${i < pin.length ? "bg-ink dark:bg-white" : "bg-stone-300 dark:bg-stone-700"}`} />
+          <span key={i} className={`size-3.5 rounded-full ${i < pin.length ? "bg-[#ff9a6a] shadow-[0_0_12px_rgba(255,154,106,0.8)]" : "bg-white/15"}`} />
         ))}
       </div>
       <p className="h-5 text-sm text-rose-600" role="alert">{error}</p>
       <div className="grid w-full max-w-xs grid-cols-3 gap-3">
         {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
-          <button key={d} className="h-16 rounded-2xl bg-white text-2xl font-semibold shadow-[0_1px_2px_rgba(16,16,20,0.05)] active:bg-stone-100 dark:bg-[#18181b]" onClick={() => press(d)}>
+          <button key={d} className="glass h-16 rounded-2xl text-2xl font-semibold active:bg-white/15" onClick={() => press(d)}>
             {d}
           </button>
         ))}
         <button className="h-16 rounded-2xl text-sm text-stone-500" onClick={() => setPin((p) => p.slice(0, -1))} aria-label="Hapus angka">
           ⌫
         </button>
-        <button className="h-16 rounded-2xl bg-white text-2xl font-semibold shadow-[0_1px_2px_rgba(16,16,20,0.05)] active:bg-stone-100 dark:bg-[#18181b]" onClick={() => press("0")}>
+        <button className="glass h-16 rounded-2xl text-2xl font-semibold active:bg-white/15" onClick={() => press("0")}>
           0
         </button>
         <button
-          className="h-16 rounded-2xl bg-ink text-sm font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-ink"
+          className="h-16 rounded-2xl bg-white text-sm font-semibold text-black disabled:opacity-40"
           disabled={pin.length < 4 || busy}
           onClick={() => submit(pin)}
         >

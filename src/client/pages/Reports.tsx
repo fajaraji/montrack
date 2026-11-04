@@ -26,7 +26,7 @@ function Trend({ r }: { r: ReportsDTO }) {
           <div key={t.month} className="flex flex-1 flex-col items-center gap-1">
             <div className="flex h-32 w-full items-end justify-center gap-0.5">
               <div className="w-1/2 rounded-t-md bg-ink dark:bg-white" style={{ height: `${Math.max(2, (t.expense / max) * 100)}%` }} title={`Keluar ${formatRupiah(t.expense)}`} />
-              <div className="w-1/2 rounded-t-md bg-[#4f7cff]" style={{ height: `${Math.max(2, (t.income / max) * 100)}%` }} title={`Masuk ${formatRupiah(t.income)}`} />
+              <div className="w-1/2 rounded-t-md bg-[#ffb38a]" style={{ height: `${Math.max(2, (t.income / max) * 100)}%` }} title={`Masuk ${formatRupiah(t.income)}`} />
             </div>
             <span className={`text-[11px] ${t.month === r.month ? "font-semibold" : "text-stone-500"}`}>{shortMonth(t.month)}</span>
           </div>
@@ -34,7 +34,7 @@ function Trend({ r }: { r: ReportsDTO }) {
       </div>
       <div className="mt-2 flex gap-4 text-xs text-stone-500">
         <span><span className="mr-1 inline-block size-2 rounded-full bg-ink dark:bg-white" />Pengeluaran</span>
-        <span><span className="mr-1 inline-block size-2 rounded-full bg-[#4f7cff]" />Pemasukan</span>
+        <span><span className="mr-1 inline-block size-2 rounded-full bg-[#ffb38a]" />Pemasukan</span>
       </div>
       <table className="mt-3 w-full text-sm">
         <tbody className="divide-y divide-stone-100 dark:divide-stone-800">

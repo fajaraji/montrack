@@ -251,7 +251,7 @@ export function Review() {
             {list.length ? `${list.length} transaksi menunggu kategori` : "Ketuk kategori yang disarankan; salah pilih bisa dibatalkan."}
           </p>
         </div>
-        <label className="flex cursor-pointer items-center gap-2 rounded-2xl bg-white px-3 py-2 text-sm dark:bg-[#18181b]">
+        <label className="flex cursor-pointer items-center gap-2 rounded-2xl bg-white px-3 py-2 text-sm dark:bg-white/[0.05] dark:backdrop-blur-xl">
           <span className="text-stone-600 dark:text-stone-300">Ingat untuk merchant sama</span>
           <input
             type="checkbox"

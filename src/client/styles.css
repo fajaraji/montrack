@@ -1,30 +1,50 @@
 @import "tailwindcss";
 
+/* Mode gelap selalu aktif (kelas .dark di <html>). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
- * Tema Montrack: latar abu-abu lembut, kartu putih bersudut besar tanpa garis tepi,
- * tombol utama hitam, aksen oranye untuk sorotan.
+ * Tema Montrack: gelap dengan cahaya hangat buram di latar, kartu kaca
+ * semi-transparan bergaris tipis, tombol utama pil putih, aksen peach→coral.
  */
 @theme {
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --color-brand-50: #fff4ec;
-  --color-brand-100: #ffe3cf;
-  --color-brand-200: #ffc69f;
-  --color-brand-500: #f57c1f;
-  --color-brand-600: #ea6a0c;
-  --color-brand-700: #c2540a;
-  --color-brand-900: #6b2e06;
-  --color-surface: #f3f3f6;
-  --color-ink: #111114;
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-brand-50: #2a1710;
+  --color-brand-100: #3a1f14;
+  --color-brand-200: #ffc9a8;
+  --color-brand-500: #ff9a6a;
+  --color-brand-600: #ff7a4a;
+  --color-brand-700: #ffb38a;
+  --color-brand-900: #ffe2cf;
+  --color-surface: #09090b;
+  --color-ink: #09090b;
 }
 
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
 }
 
 html,
 body {
-  @apply bg-surface text-ink dark:bg-[#0c0c0e] dark:text-stone-100;
+  background: #09090b;
+  color: #f4f4f5;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Cahaya hangat buram di belakang semua halaman. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -20vh -20vw;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(40vw 30vh at 18% 12%, rgba(220, 60, 30, 0.38), transparent 70%),
+    radial-gradient(35vw 28vh at 62% 4%, rgba(234, 140, 20, 0.28), transparent 70%),
+    radial-gradient(30vw 30vh at 92% 40%, rgba(190, 40, 30, 0.22), transparent 70%),
+    radial-gradient(45vw 35vh at 30% 95%, rgba(120, 30, 20, 0.25), transparent 70%);
+  filter: blur(40px);
 }
 
 .tabular {
@@ -33,41 +53,56 @@ body {
 
 @layer components {
   .card {
-    @apply rounded-3xl bg-white p-5 shadow-[0_1px_2px_rgba(16,16,20,0.04)] dark:bg-[#18181b];
+    @apply rounded-3xl border border-white/[0.08] bg-white/[0.035] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl;
   }
   .card-accent {
-    @apply rounded-3xl bg-gradient-to-br from-[#f58a2a] to-[#ee6d0d] p-5 text-white shadow-[0_8px_24px_-12px_rgba(238,109,13,0.6)];
+    @apply rounded-3xl border border-[#ff9a6a]/30 bg-[linear-gradient(140deg,rgba(255,138,76,0.28),rgba(220,50,40,0.12))] p-5 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_20px_50px_-20px_rgba(255,110,60,0.45)] backdrop-blur-xl;
   }
   .icon-tile {
-    @apply flex size-10 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-stone-700 dark:bg-white/10 dark:text-stone-200;
+    @apply flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-white/80;
+  }
+  .glass {
+    @apply border border-white/10 bg-white/[0.05] backdrop-blur-xl;
   }
 
   .input {
-    @apply w-full rounded-2xl border border-transparent bg-stone-100 px-4 py-2.5 text-base outline-none placeholder:text-stone-400 focus:border-stone-300 focus:bg-white focus:ring-4 focus:ring-stone-900/5 dark:bg-white/5 dark:focus:border-stone-600 dark:focus:bg-[#18181b];
+    @apply w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-base text-white outline-none placeholder:text-white/35 focus:border-[#ff9a6a]/50 focus:bg-white/[0.06] focus:ring-4 focus:ring-[#ff7a4a]/10;
+  }
+  select.input option {
+    background: #141416;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-ink px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-stone-800 active:scale-[0.98] disabled:opacity-40 dark:bg-white dark:text-ink dark:hover:bg-stone-200;
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-black shadow-[0_0_0_1px_rgba(255,255,255,0.12),0_10px_30px_-10px_rgba(255,255,255,0.45)] transition hover:bg-white/90 active:scale-[0.98] disabled:opacity-40;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium text-stone-700 transition hover:bg-stone-100 active:scale-[0.98] disabled:opacity-40 dark:text-stone-300 dark:hover:bg-white/10;
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-white/70 transition hover:bg-white/[0.06] hover:text-white active:scale-[0.98] disabled:opacity-40;
   }
   .btn-outline {
-    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-stone-200 bg-white px-5 py-2.5 text-sm font-semibold text-ink transition hover:bg-stone-50 active:scale-[0.98] disabled:opacity-40 dark:border-white/10 dark:bg-transparent dark:text-stone-100 dark:hover:bg-white/5;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/12 bg-white/[0.04] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/[0.08] active:scale-[0.98] disabled:opacity-40;
   }
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm transition hover:border-stone-300 dark:border-white/10 dark:bg-white/5;
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-white/85 transition hover:border-white/25 hover:bg-white/[0.07];
   }
   .label {
-    @apply mb-1.5 block text-sm font-medium text-stone-500 dark:text-stone-400;
+    @apply mb-1.5 block text-sm font-medium text-white/55;
   }
   .badge {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
   }
-
-  /* Progress bar bergaris (seperti batas pengeluaran pada referensi). */
+  .kbd {
+    @apply inline-flex items-center rounded-md border border-white/10 bg-white/[0.06] px-1.5 py-0.5 font-mono text-[11px] text-white/60;
+  }
+  .logo {
+    @apply flex items-center justify-center rounded-xl bg-[linear-gradient(140deg,#ffd0a8,#ff6a3d)] font-extrabold text-black shadow-[0_6px_20px_-6px_rgba(255,106,61,0.7)];
+  }
+  /* Teks sorotan bergradien. */
+  .text-gradient {
+    @apply bg-[linear-gradient(90deg,#ffe0c2,#ffb38a_45%,#ff7a59)] bg-clip-text text-transparent;
+  }
+  /* Progress bar bergaris. */
   .bar-striped {
-    background-image: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.28) 0 6px, transparent 6px 12px);
+    background-image: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.25) 0 6px, transparent 6px 12px);
   }
 }
 

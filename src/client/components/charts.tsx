@@ -67,7 +67,8 @@ export function LineChart({ labels, series, height = 200 }: { labels: string[]; 
           const pts = s.values.map((v, i) => [x(i), y(v)] as [number, number]);
           return (
             <g key={s.name}>
-              <path d={smoothPath(pts)} fill="none" stroke={s.color} strokeWidth={3.5} strokeLinecap="round" />
+              <path d={smoothPath(pts)} fill="none" stroke={s.color} strokeWidth={8} strokeLinecap="round" opacity={0.15} />
+              <path d={smoothPath(pts)} fill="none" stroke={s.color} strokeWidth={3} strokeLinecap="round" />
               {pts.map(([px, py], i) => (
                 <circle key={i} cx={px} cy={py} r={sel === i ? 5 : 3} fill={s.color} />
               ))}

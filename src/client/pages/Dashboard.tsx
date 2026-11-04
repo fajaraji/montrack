@@ -85,7 +85,7 @@ function StatTile({ label, icon, value, accent = false, children }: { label: str
         </span>
       </div>
       <div>
-        <p className="tabular text-[1.65rem] leading-tight font-extrabold tracking-tight">{formatRupiahShort(value)}</p>
+        <p className="tabular text-xl leading-tight font-bold tracking-tight whitespace-nowrap sm:text-[1.65rem]">{formatRupiahShort(value)}</p>
         {children}
       </div>
     </div>
@@ -142,18 +142,20 @@ export function Dashboard() {
   const trend = reports.data?.trend ?? [];
   const prevIncome = trend.length >= 2 ? trend[trend.length - 2].income : 0;
   const prevMonthName = MONTHS_ID[(ym.month + 10) % 12];
-  const dark = typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches;
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">Ringkasan</h1>
-          <p className="text-sm text-stone-500">
-            Keuanganmu bulan {MONTHS_ID[ym.month - 1]} {ym.year}
-          </p>
+          <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#ff9a6a]/30 bg-[#ff7a4a]/10 px-3 py-1 text-xs font-medium text-[#ffc9a8]">
+            <span className="size-1.5 rounded-full bg-[#ff9a6a] shadow-[0_0_8px_#ff9a6a]" />
+            {MONTHS_ID[ym.month - 1]} {ym.year} · tersinkron dari email
+          </span>
+          <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
+            Keuanganmu, <span className="text-gradient">sekilas.</span>
+          </h1>
         </div>
-        <div className="rounded-2xl bg-white px-1 dark:bg-[#18181b]">
+        <div className="rounded-2xl bg-white px-1 dark:bg-white/[0.05] dark:backdrop-blur-xl">
           <MonthSwitcher month={month} onChange={setMonth} />
         </div>
       </div>
@@ -169,7 +171,7 @@ export function Dashboard() {
         />
       )}
       {s && (s.reviewCount > 0 || s.unparsedEmailCount > 0) && (
-        <Link href="/tinjau" className="flex items-center justify-between gap-3 rounded-3xl bg-brand-50 px-5 py-3.5 text-sm font-medium text-brand-900 dark:bg-brand-500/10 dark:text-brand-100">
+        <Link href="/tinjau" className="flex items-center justify-between gap-3 rounded-3xl bg-brand-50 px-5 py-3.5 text-sm font-medium text-brand-900 dark:bg-brand-500/10 dark:text-brand-900">
           <span className="flex items-center gap-3">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white">
               <Icon name="check" className="size-4" />
@@ -191,7 +193,7 @@ export function Dashboard() {
           <section className="card flex flex-col gap-5 lg:col-span-5">
             <div>
               <p className="text-sm font-medium text-stone-500">Total saldo</p>
-              <p className="tabular mt-1 text-[2rem] leading-tight font-extrabold tracking-tight">{formatRupiah(totalBalance)}</p>
+              <p className="tabular text-gradient mt-1 text-[2.1rem] leading-tight font-bold tracking-tight">{formatRupiah(totalBalance)}</p>
               <p className="mt-1 text-xs text-stone-400">
                 Selisih bulan ini <Money value={s.net} sign className={`font-semibold ${s.net >= 0 ? "text-emerald-600" : "text-rose-600"}`} />
               </p>
@@ -222,7 +224,7 @@ export function Dashboard() {
                       key={a.id}
                       href={`/transaksi?accountId=${a.id}`}
                       className={`min-w-36 shrink-0 rounded-2xl border p-3 ${
-                        a.balance < 0 ? "border-brand-200 bg-brand-50/50 dark:border-brand-900 dark:bg-brand-500/5" : "border-stone-100 bg-stone-50 dark:border-white/5 dark:bg-white/5"
+                        a.balance < 0 ? "border-brand-200 bg-brand-50/50 dark:border-brand-500/30 dark:bg-brand-500/5" : "border-stone-100 bg-stone-50 dark:border-white/5 dark:bg-white/5"
                       }`}
                     >
                       <p className="text-xs font-semibold text-stone-500">{a.name}</p>
@@ -266,7 +268,7 @@ export function Dashboard() {
               </div>
               <div className="flex gap-3 text-xs text-stone-500">
                 <span className="flex items-center gap-1.5">
-                  <span className="size-2 rounded-full bg-[#4f7cff]" />
+                  <span className="size-2 rounded-full bg-[#ffb38a]" />
                   Pemasukan
                 </span>
                 <span className="flex items-center gap-1.5">
@@ -280,8 +282,8 @@ export function Dashboard() {
                 <LineChart
                   labels={trend.map((t) => MONTHS_ID[Number(t.month.slice(5)) - 1].slice(0, 3))}
                   series={[
-                    { name: "Pemasukan", color: "#4f7cff", values: trend.map((t) => t.income) },
-                    { name: "Pengeluaran", color: dark ? "#f4f4f5" : "#111114", values: trend.map((t) => t.expense) },
+                    { name: "Pemasukan", color: "#ffb38a", values: trend.map((t) => t.income) },
+                    { name: "Pengeluaran", color: "#f4f4f5", values: trend.map((t) => t.expense) },
                   ]}
                 />
               ) : (

@@ -25,7 +25,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
         }}
       >
         <div>
-          <span className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-ink text-2xl font-extrabold text-white dark:bg-white dark:text-ink">M</span>
+          <span className="mb-4 logo size-12 text-2xl">M</span>
           <h1 className="text-2xl font-extrabold tracking-tight">Montrack</h1>
           <p className="text-sm text-stone-500">Catatan keuangan yang terisi sendiri.</p>
         </div>

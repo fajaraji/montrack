@@ -20,8 +20,8 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} />
-      <div className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-[2rem] bg-white p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[2rem] dark:bg-[#18181b]">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-[2rem] border border-white/10 bg-[#111113]/90 p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl backdrop-blur-2xl sm:rounded-[2rem]">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">{title}</h2>
           <button className="btn-ghost -mr-2 px-2" onClick={onClose} aria-label="Tutup">
@@ -103,11 +103,11 @@ export function useToast() {
   const [busy, setBusy] = useState(false);
   const el = toast ? (
     <div className="fixed inset-x-0 bottom-20 z-[60] flex justify-center px-4 md:bottom-6" role="status">
-      <div className="flex w-full max-w-lg items-center gap-3 rounded-2xl bg-stone-900 px-4 py-3 text-sm text-white shadow-lg dark:bg-stone-100 dark:text-stone-900">
+      <div className="flex w-full max-w-lg items-center gap-3 rounded-2xl glass bg-[#141416]/85 px-4 py-3 text-sm text-white shadow-2xl">
         <span className="flex-1">{toast.msg}</span>
         {toast.action && (
           <button
-            className="shrink-0 font-semibold text-brand-100 underline-offset-2 hover:underline disabled:opacity-50 dark:text-brand-700"
+            className="shrink-0 font-semibold text-[#ffb38a] underline-offset-2 hover:underline disabled:opacity-50"
             disabled={busy}
             onClick={async () => {
               setBusy(true);

@@ -134,7 +134,7 @@ export function TxTable({ items, onOpen, grouped = false }: { items: Transaction
             const inc = counted.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
             return (
               <section key={day}>
-                <header className="sticky top-0 z-10 -mx-5 flex items-center justify-between bg-white/95 px-5 pt-3 pb-1 text-xs backdrop-blur dark:bg-[#18181b]/95">
+                <header className="sticky top-0 z-10 -mx-5 flex items-center justify-between bg-white/95 px-5 pt-3 pb-1 text-xs backdrop-blur dark:bg-[#0f0f11]/80">
                   <span className="font-bold tracking-wide text-stone-500 uppercase">{dayLabel(day)}</span>
                   <span className="tabular text-stone-400">
                     {inc > 0 && <span className="mr-2 text-emerald-600">+{formatRupiah(inc)}</span>}

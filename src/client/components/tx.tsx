@@ -79,9 +79,9 @@ export function CategoryGrid({
       onClick={() => onPick(c)}
       className={`chip ${
         value === c.id
-          ? "border-brand-600 bg-brand-50 font-medium text-brand-700 dark:bg-brand-900/40 dark:text-brand-100"
+          ? "border-brand-600 bg-brand-50 font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-900"
           : hint
-            ? "border-brand-200 bg-brand-50/60 dark:border-brand-900 dark:bg-brand-900/20"
+            ? "border-brand-200 bg-brand-50/60 dark:border-brand-500/30 dark:bg-brand-500/10"
             : ""
       }`}
     >

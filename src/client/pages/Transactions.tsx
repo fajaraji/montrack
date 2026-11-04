@@ -60,7 +60,7 @@ export function Transactions() {
             {MONTHS_ID[ym.month - 1]} {ym.year}
           </p>
         </div>
-        <div className="rounded-2xl bg-white px-1 dark:bg-[#18181b]">
+        <div className="rounded-2xl bg-white px-1 dark:bg-white/[0.05] dark:backdrop-blur-xl">
           <MonthSwitcher month={month} onChange={(m) => setParams({ month: m })} />
         </div>
       </div>
