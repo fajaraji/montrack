@@ -4,14 +4,18 @@ import { useAsync, useStore } from "../lib/store";
 import { Empty, ErrorNote, PageHeader, Sheet, Spinner, useToast } from "../components/ui";
 import { CategoryGrid, TxAmount, TxForm, txTitle, undoAction } from "../components/tx";
 import { wibParts, MONTHS_ID } from "../../shared/time";
-import { providerLabel, type InboxEmailDTO, type SettingsDTO, type TransactionDTO, type UndoPayload } from "../../shared/types";
+import { providerLabel, type InboxEmailDTO, type ReviewItemDTO, type SettingsDTO, type UndoPayload } from "../../shared/types";
 
 function ReviewCard({
   t,
+  selected,
+  onSelect,
   onDone,
   onEdit,
 }: {
-  t: TransactionDTO;
+  t: ReviewItemDTO;
+  selected: boolean;
+  onSelect: (v: boolean) => void;
   onDone: (msg: string, undo?: UndoPayload) => void;
   onEdit: () => void;
 }) {
@@ -21,6 +25,7 @@ function ReviewCard({
   const [error, setError] = useState<string | null>(null);
   const p = wibParts(new Date(t.occurredAt));
   const kind = t.type === "income" ? "income" : "expense";
+  const isBankTransfer = t.description === "Transfer keluar" || t.description === "Transfer masuk";
 
   async function pick(categoryId: number, categoryName?: string) {
     setBusy(true);
@@ -31,17 +36,12 @@ function ReviewCard({
       });
       bump();
       const name = categoryName ?? category(categoryId)?.name ?? "kategori";
-      onDone(
-        r.learned > 0 ? `Masuk ${name}, ${r.learned} transaksi serupa ikut.` : `Masuk ${name}.`,
-        r.undo,
-      );
+      onDone(r.learned > 0 ? `Masuk ${name}, ${r.learned} transaksi serupa ikut.` : `Masuk ${name}.`, r.undo);
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
     }
   }
-
-  const isBankTransfer = t.description === "Transfer keluar" || t.description === "Transfer masuk";
 
   /** Transfer ke/dari rekening sendiri: jadikan transfer & ingat nama pemiliknya. */
   async function markOwn() {
@@ -74,9 +74,16 @@ function ReviewCard({
   }
 
   return (
-    <div className="card space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+    <div className={`card space-y-3 ${selected ? "ring-2 ring-brand-600" : ""}`}>
+      <div className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          className="mt-1 size-5 shrink-0 accent-brand-700"
+          checked={selected}
+          onChange={(e) => onSelect(e.target.checked)}
+          aria-label={`Pilih ${txTitle(t, (id) => account(id)?.name ?? "?")}`}
+        />
+        <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{txTitle(t, (id) => account(id)?.name ?? "?")}</p>
           <p className="text-xs text-stone-500">
             {p.day} {MONTHS_ID[p.month - 1]} {String(p.hour).padStart(2, "0")}.{String(p.minute).padStart(2, "0")} · {account(t.accountId)?.name ?? "?"}
@@ -93,7 +100,7 @@ function ReviewCard({
       {t.type === "expense" || t.type === "income" ? (
         <>
           <div className={busy ? "pointer-events-none opacity-50" : ""}>
-            <CategoryGrid kind={kind} value={t.categoryId} onPick={(c) => pick(c.id, c.name)} />
+            <CategoryGrid kind={kind} value={t.categoryId} suggested={t.suggestions} collapsed onPick={(c) => pick(c.id, c.name)} />
           </div>
           <div className="flex items-center justify-between gap-2 text-sm">
             <label className="flex items-center gap-2">
@@ -166,29 +173,103 @@ function EmailItem({ e, onChanged }: { e: InboxEmailDTO; onChanged: (msg: string
   );
 }
 
+/** Pilih kategori untuk banyak transaksi sekaligus. */
+function BulkCategory({ items, onDone }: { items: ReviewItemDTO[]; onDone: (msg: string, undo?: UndoPayload) => void }) {
+  const { bump } = useStore();
+  const [remember, setRemember] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const kinds = new Set(items.map((t) => (t.type === "income" ? "income" : "expense")));
+  const kind = kinds.size === 1 ? [...kinds][0] : null;
+  if (!kind) return <p className="text-sm text-stone-500">Pilihan berisi pengeluaran dan pemasukan sekaligus. Pilih salah satu jenis saja.</p>;
+  // Saran gabungan: kategori yang paling sering disarankan untuk pilihan ini.
+  const score = new Map<number, number>();
+  for (const t of items) t.suggestions.forEach((id, i) => score.set(id, (score.get(id) ?? 0) + 3 - i));
+  const suggested = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => id);
+  return (
+    <div className="space-y-3">
+      <CategoryGrid
+        kind={kind}
+        value={null}
+        suggested={suggested}
+        onPick={async (c) => {
+          try {
+            const r = await api<{ learned: number; undo: UndoPayload }>("/transactions/bulk", {
+              body: { ids: items.map((t) => t.id), categoryId: c.id, remember },
+            });
+            bump();
+            onDone(`${items.length} transaksi masuk ${c.name}${r.learned ? `, ${r.learned} serupa ikut` : ""}.`, r.undo);
+          } catch (e) {
+            setError((e as Error).message);
+          }
+        }}
+      />
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" className="size-4 accent-brand-700" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+        Ingat untuk merchant-merchant ini
+      </label>
+      <ErrorNote message={error} />
+    </div>
+  );
+}
+
 export function Review() {
   const { version, bump } = useStore();
-  const [editing, setEditing] = useState<TransactionDTO | null>(null);
+  const [editing, setEditing] = useState<ReviewItemDTO | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
   const { toastEl, showToast } = useToast();
-  const txs = useAsync(() => api<TransactionDTO[]>("/transactions?status=review&limit=200"), [version]);
+  const txs = useAsync(() => api<ReviewItemDTO[]>("/review"), [version]);
   const emails = useAsync(() => api<InboxEmailDTO[]>("/inbox?status=unparsed"), [version]);
-  const say = (m: string, undo?: UndoPayload) => showToast(m, undoAction(undo, bump));
+  const say = (m: string, undo?: UndoPayload) => {
+    setSelected(new Set());
+    showToast(m, undoAction(undo, bump));
+  };
+  const list = txs.data ?? [];
+  const chosen = list.filter((t) => selected.has(t.id));
+
+  async function bulk(body: Record<string, unknown>, msg: string) {
+    const r = await api<{ undo: UndoPayload }>("/transactions/bulk", { body: { ids: [...selected], ...body } });
+    bump();
+    say(msg, r.undo);
+  }
 
   return (
     <div className="space-y-4">
       <PageHeader title="Perlu ditinjau" />
       <p className="text-sm text-stone-500">
-        Pilih kategori sekali, Montrack akan mengingatnya untuk merchant yang sama berikutnya. Salah pilih? Ketuk{" "}
-        <b>Batalkan</b> di notifikasi bawah, atau ubah kapan saja lewat menu <b>Transaksi</b>.
+        Ketuk kategori yang disarankan, atau centang beberapa sekaligus. Salah pilih? Ketuk <b>Batalkan</b> di notifikasi bawah, atau ubah kapan saja di menu <b>Transaksi</b>.
       </p>
       {toastEl}
       <ErrorNote message={txs.error} />
+      {list.length > 1 && (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="size-5 accent-brand-700"
+            checked={selected.size === list.length}
+            onChange={(e) => setSelected(e.target.checked ? new Set(list.map((t) => t.id)) : new Set())}
+          />
+          Pilih semua ({list.length})
+        </label>
+      )}
       {txs.loading && !txs.data ? (
         <Spinner />
-      ) : txs.data?.length ? (
+      ) : list.length ? (
         <div className="space-y-3">
-          {txs.data.map((t) => (
-            <ReviewCard key={t.id} t={t} onDone={say} onEdit={() => setEditing(t)} />
+          {list.map((t) => (
+            <ReviewCard
+              key={t.id}
+              t={t}
+              selected={selected.has(t.id)}
+              onSelect={(v) => {
+                const next = new Set(selected);
+                if (v) next.add(t.id);
+                else next.delete(t.id);
+                setSelected(next);
+              }}
+              onDone={say}
+              onEdit={() => setEditing(t)}
+            />
           ))}
         </div>
       ) : (
@@ -198,15 +279,37 @@ export function Review() {
       {emails.data && emails.data.length > 0 && (
         <section className="space-y-3 pt-4">
           <h2 className="font-semibold">Email yang belum terbaca ({emails.data.length})</h2>
-          <p className="text-sm text-stone-500">
-            Format email ini belum dikenali. Catat manual, atau kirim contohnya agar parser bisa ditambah.
-          </p>
+          <p className="text-sm text-stone-500">Format email ini belum dikenali. Catat manual, atau kirim contohnya agar parser bisa ditambah.</p>
           {emails.data.map((e) => (
-            <EmailItem key={e.id} e={e} onChanged={say} />
+            <EmailItem key={e.id} e={e} onChanged={(m) => say(m)} />
           ))}
         </section>
       )}
 
+      {selected.size > 0 && (
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 px-4 md:bottom-4">
+          <div className="mx-auto flex max-w-lg flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow-xl ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-700">
+            <span className="flex-1 text-sm font-medium">{selected.size} dipilih</span>
+            <button className="btn-primary py-2" onClick={() => setBulkOpen(true)}>Pilih kategori</button>
+            <button className="btn-outline py-2" onClick={() => bulk({ status: "ok" }, `${selected.size} ditandai benar.`)}>Tandai benar</button>
+            <button className="btn-ghost py-2" onClick={() => bulk({ excluded: true, status: "ok" }, `${selected.size} tidak dihitung di laporan.`)}>
+              Abaikan
+            </button>
+          </div>
+        </div>
+      )}
+
+      <Sheet open={bulkOpen} onClose={() => setBulkOpen(false)} title={`Kategori untuk ${chosen.length} transaksi`}>
+        {bulkOpen && (
+          <BulkCategory
+            items={chosen}
+            onDone={(m, undo) => {
+              setBulkOpen(false);
+              say(m, undo);
+            }}
+          />
+        )}
+      </Sheet>
       <Sheet open={!!editing} onClose={() => setEditing(null)} title="Ubah transaksi">
         {editing && (
           <TxForm

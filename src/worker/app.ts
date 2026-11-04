@@ -283,10 +283,14 @@ export function createApp(getDb: (env: Bindings) => DB) {
     if (v.type !== "transfer") v.toAccountId = null;
     const [t] = await c.var.db.insert(transactions).values({ ...v, source: "manual" }).returning();
     let learned = 0;
+    const undo: UndoPayload = { transactions: [], rule: null, deleteIds: [t.id] };
     if (b.remember && t.categoryId && (t.type === "expense" || t.type === "income")) {
-      learned = (await learnRule(c.var.db, t.merchant, t.categoryId, { exceptId: t.id })).applied;
+      const r = await learnRule(c.var.db, t.merchant, t.categoryId, { exceptId: t.id });
+      learned = r.applied;
+      undo.transactions.push(...r.changed);
+      if (r.pattern) undo.rule = { pattern: r.pattern, categoryId: r.previousRuleCategoryId };
     }
-    return c.json({ transaction: toDTO(t), learned }, 201);
+    return c.json({ transaction: toDTO(t), learned, undo }, 201);
   });
 
   app.patch("/transactions/:id", async (c) => {
@@ -340,6 +344,8 @@ export function createApp(getDb: (env: Bindings) => DB) {
   app.post("/undo", async (c) => {
     const b = await c.req.json<UndoPayload>();
     if (!Array.isArray(b.transactions) || b.transactions.length > 2000) throw bad("Data batalkan tidak valid");
+    const del = (b.deleteIds ?? []).map(Number).filter(Number.isInteger);
+    if (del.length) await c.var.db.delete(transactions).where(inArray(transactions.id, del));
     // Transaksi yang hanya berubah kategori/status dikembalikan per kelompok (hemat query).
     const simple = new Map<string, number[]>();
     const full: UndoPayload["transactions"] = [];

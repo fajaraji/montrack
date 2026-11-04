@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
+import { disablePush, enablePush, pushState, type PushState } from "../lib/push";
 import { api } from "../lib/api";
 import { useAsync, useStore } from "../lib/store";
-import { ErrorNote, PageHeader } from "../components/ui";
-import { parseRupiah } from "../../shared/money";
+import { ErrorNote, PageHeader, useToast } from "../components/ui";
 import { providerLabel, type InboxEmailDTO, type SettingsDTO } from "../../shared/types";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -16,14 +16,12 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
   const { version, bump } = useStore();
   const settings = useAsync(() => api<SettingsDTO>("/settings"), [version]);
   const inbox = useAsync(() => api<InboxEmailDTO[]>("/inbox"), [version]);
-  const [budget, setBudget] = useState("");
   const [owners, setOwners] = useState("");
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!settings.data) return;
-    setBudget(settings.data.monthlyBudget ? settings.data.monthlyBudget.toLocaleString("id-ID") : "");
     setOwners(settings.data.ownerNames.join(", "));
   }, [settings.data]);
 
@@ -41,7 +39,6 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
             await api("/settings", {
               method: "PATCH",
               body: {
-                monthlyBudget: parseRupiah(budget) || null,
                 ownerNames: owners.split(",").map((s) => s.trim()).filter(Boolean),
               },
             });
@@ -54,11 +51,6 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
         }}
       >
         <div>
-          <label className="label" htmlFor="budget">Anggaran pengeluaran per bulan</label>
-          <input id="budget" className="input tabular" inputMode="numeric" placeholder="kosongkan jika tidak pakai" value={budget} onChange={(e) => setBudget(String(parseRupiah(e.target.value)?.toLocaleString("id-ID") ?? ""))} />
-          <p className="mt-1 text-xs text-stone-500">Dipakai untuk menghitung “aman dipakai per hari” di Beranda.</p>
-        </div>
-        <div>
           <label className="label" htmlFor="owners">Nama pemilik rekening</label>
           <input id="owners" className="input" placeholder="mis. Budi Santoso, BUDI S" value={owners} onChange={(e) => setOwners(e.target.value)} />
           <p className="mt-1 text-xs text-stone-500">
@@ -68,6 +60,15 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
         <ErrorNote message={error} />
         <button className="btn-primary">{saved ? "Tersimpan ✓" : "Simpan"}</button>
       </form>
+
+      <PinSection hasPin={settings.data?.hasPin ?? false} />
+      <PushSection />
+
+      <section className="card space-y-2 text-sm">
+        <h2 className="text-base font-semibold">Ekspor data</h2>
+        <p className="text-stone-500">Semua transaksi dalam satu file CSV (bisa dibuka di Excel/Google Sheets).</p>
+        <a className="btn-outline" href="/api/export.csv" download>⇩ Unduh CSV</a>
+      </section>
 
       <section className="card space-y-3 text-sm">
         <h2 className="text-base font-semibold">Pencatatan otomatis dari Gmail</h2>
@@ -137,5 +138,109 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
         Keluar
       </button>
     </div>
+  );
+}
+
+function PinSection({ hasPin }: { hasPin: boolean }) {
+  const { bump } = useStore();
+  const [pin, setPin] = useState("");
+  const [current, setCurrent] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const { toastEl, showToast } = useToast();
+  return (
+    <section className="card space-y-3 text-sm">
+      {toastEl}
+      <h2 className="text-base font-semibold">PIN aplikasi</h2>
+      <p className="text-stone-500">
+        Sesi login berlaku 180 hari dan diperpanjang otomatis, jadi password hanya diminta di perangkat baru. PIN dipakai untuk membuka aplikasi
+        dengan cepat (diminta lagi setelah 5 menit tidak dipakai). Salah 5 kali = harus login ulang dengan password.
+      </p>
+      {hasPin && (
+        <input className="input tabular" type="password" inputMode="numeric" maxLength={6} placeholder="PIN saat ini" value={current} onChange={(e) => setCurrent(e.target.value.replace(/\D/g, ""))} aria-label="PIN saat ini" />
+      )}
+      <div className="flex gap-2">
+        <input className="input tabular" type="password" inputMode="numeric" maxLength={6} placeholder={hasPin ? "PIN baru (4–6 angka)" : "PIN 4–6 angka"} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} aria-label="PIN baru" />
+        <button
+          className="btn-primary"
+          disabled={pin.length < 4}
+          onClick={async () => {
+            setError(null);
+            try {
+              await api("/auth/pin", { body: { pin, currentPin: current } });
+              setPin("");
+              setCurrent("");
+              bump();
+              showToast(hasPin ? "PIN diganti." : "PIN dipasang.");
+            } catch (e) {
+              setError((e as Error).message);
+            }
+          }}
+        >
+          {hasPin ? "Ganti" : "Pasang"}
+        </button>
+      </div>
+      {hasPin && (
+        <button
+          className="text-rose-700 dark:text-rose-400"
+          onClick={async () => {
+            setError(null);
+            try {
+              await api("/auth/pin", { method: "DELETE", body: { currentPin: current } });
+              setCurrent("");
+              bump();
+              showToast("PIN dihapus.");
+            } catch (e) {
+              setError((e as Error).message);
+            }
+          }}
+        >
+          Hapus PIN
+        </button>
+      )}
+      <ErrorNote message={error} />
+    </section>
+  );
+}
+
+function PushSection() {
+  const [state, setState] = useState<PushState | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => {
+    pushState().then(setState).catch(() => setState("unsupported"));
+  }, []);
+  const label: Record<PushState, string> = {
+    unsupported: "Browser ini belum mendukung notifikasi. Di Android, buka lewat Chrome lalu pasang sebagai aplikasi (menu ⋮ › Instal aplikasi).",
+    unconfigured: "Notifikasi belum dikonfigurasi di server (secret VAPID belum diisi).",
+    denied: "Izin notifikasi ditolak. Aktifkan lewat pengaturan situs di browser.",
+    off: "Terima rekap mingguan (Senin pagi), peringatan anggaran 80%/100%, dan pengingat tagihan rutin.",
+    on: "Notifikasi aktif di perangkat ini.",
+  };
+  return (
+    <section className="card space-y-3 text-sm">
+      <h2 className="text-base font-semibold">Notifikasi di HP</h2>
+      <p className="text-stone-500">{state ? label[state] : "Memeriksa…"}</p>
+      {state === "off" && (
+        <button className="btn-primary" onClick={async () => setState(await enablePush().catch(() => "off" as const))}>
+          Aktifkan notifikasi
+        </button>
+      )}
+      {state === "on" && (
+        <div className="flex gap-2">
+          <button
+            className="btn-outline"
+            onClick={async () => {
+              const r = await api<{ sent: number }>("/push/test", { method: "POST" });
+              setMsg(r.sent ? "Notifikasi uji dikirim." : "Gagal mengirim; coba aktifkan ulang.");
+            }}
+          >
+            Kirim uji
+          </button>
+          <button className="btn-ghost" onClick={async () => setState(await disablePush())}>
+            Matikan
+          </button>
+        </div>
+      )}
+      {msg && <p className="text-xs text-stone-500">{msg}</p>}
+    </section>
   );
 }

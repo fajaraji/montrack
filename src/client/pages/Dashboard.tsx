@@ -2,11 +2,51 @@ import { useState } from "react";
 import { api } from "../lib/api";
 import { useAsync, useStore } from "../lib/store";
 import { Link, navigate } from "../lib/router";
-import { Money, MonthSwitcher, Spinner, ErrorNote, Sheet, useToast } from "../components/ui";
-import { TxForm } from "../components/tx";
+import { Money, MonthSwitcher, Spinner, ErrorNote } from "../components/ui";
+import { BudgetBar } from "./Budgets";
+import { Recurring } from "./Reports";
 import { formatRupiah, formatRupiahShort } from "../../shared/money";
 import { MONTHS_ID, parseYm, formatYm } from "../../shared/time";
-import type { MonthSummaryDTO } from "../../shared/types";
+import type { MonthSummaryDTO, RecurringDTO } from "../../shared/types";
+
+interface ChecklistDTO {
+  dismissed: boolean;
+  items: { id: string; label: string; done: boolean; href: string; hint: string }[];
+}
+
+function Checklist({ c, onDismiss }: { c: ChecklistDTO; onDismiss: () => void }) {
+  const done = c.items.filter((i) => i.done).length;
+  if (c.dismissed || done === c.items.length) return null;
+  return (
+    <section className="card space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h2 className="font-semibold">Siapkan Montrack</h2>
+          <p className="text-xs text-stone-500">{done} dari {c.items.length} langkah selesai</p>
+        </div>
+        <button className="text-xs text-stone-400" onClick={onDismiss}>Tutup</button>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
+        <div className="h-full rounded-full bg-brand-600" style={{ width: `${(done / c.items.length) * 100}%` }} />
+      </div>
+      <ul className="space-y-1">
+        {c.items.map((i) => (
+          <li key={i.id}>
+            <Link href={i.href} className="flex items-start gap-3 rounded-xl px-1 py-1.5 hover:bg-stone-50 dark:hover:bg-stone-800/50">
+              <span className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full text-xs ${i.done ? "bg-brand-600 text-white" : "border border-stone-300 dark:border-stone-600"}`} aria-hidden>
+                {i.done ? "✓" : ""}
+              </span>
+              <span className="min-w-0">
+                <span className={`block text-sm ${i.done ? "text-stone-400 line-through" : "font-medium"}`}>{i.label}</span>
+                {!i.done && <span className="block text-xs text-stone-500">{i.hint}</span>}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 function Comparison({ s }: { s: MonthSummaryDTO }) {
   if (s.dayOfMonth === 0) return null;
@@ -73,8 +113,8 @@ function DailyBars({ s }: { s: MonthSummaryDTO }) {
 export function Dashboard() {
   const { accounts, category, version, bump } = useStore();
   const [month, setMonth] = useState(formatYm(parseYm(null)));
-  const [adding, setAdding] = useState(false);
-  const { toastEl, showToast } = useToast();
+  const checklist = useAsync(() => api<ChecklistDTO>("/checklist"), [version]);
+  const recurring = useAsync(() => api<RecurringDTO[]>("/recurring"), [version]);
   const { data: s, error, loading } = useAsync(() => api<MonthSummaryDTO>(`/summary?month=${month}`), [month, version]);
   const active = accounts.filter((a) => !a.archived);
   const totalBalance = active.reduce((sum, a) => sum + a.balance, 0);
@@ -84,12 +124,12 @@ export function Dashboard() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <MonthSwitcher month={month} onChange={setMonth} />
-        <button className="btn-primary" onClick={() => setAdding(true)}>
-          + Catat
-        </button>
       </div>
-      {toastEl}
       <ErrorNote message={error} />
+      {checklist.data && <Checklist c={checklist.data} onDismiss={async () => {
+        await api("/settings", { method: "PATCH", body: { checklistDismissed: true } });
+        bump();
+      }} />}
       {loading && !s && <Spinner />}
       {s && (
         <>
@@ -159,6 +199,16 @@ export function Dashboard() {
             </section>
           )}
 
+          {s.isCurrentMonth && recurring.data && recurring.data.some((r) => r.daysUntil >= -3 && r.daysUntil <= 7) && (
+            <section className="card">
+              <div className="mb-1 flex items-center justify-between">
+                <h2 className="font-semibold">Tagihan 7 hari ke depan</h2>
+                <Link href="/laporan" className="text-sm text-brand-700 dark:text-brand-500">Semua</Link>
+              </div>
+              <Recurring items={recurring.data} compact />
+            </section>
+          )}
+
           <section className="card">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold">Per kategori</h2>
@@ -173,6 +223,7 @@ export function Dashboard() {
                 {s.byCategory.map((g) => {
                   const c = category(g.categoryId);
                   const pct = s.expense ? (g.total / s.expense) * 100 : 0;
+                  const budget = s.isCurrentMonth ? c?.monthlyBudget ?? null : null;
                   return (
                     <li key={g.categoryId ?? "none"}>
                       <button
@@ -185,11 +236,20 @@ export function Dashboard() {
                             {c?.name ?? "Belum dikategorikan"}
                             <span className="text-xs text-stone-400">{g.count}×</span>
                           </span>
-                          <Money value={g.total} className="font-medium" />
+                          <span className="text-right">
+                            <Money value={g.total} className="font-medium" />
+                            {budget && <span className="tabular block text-xs text-stone-500">dari {formatRupiahShort(budget)}</span>}
+                          </span>
                         </div>
-                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
-                          <div className={`h-full rounded-full ${c ? "bg-brand-500" : "bg-amber-400"}`} style={{ width: `${pct}%` }} />
-                        </div>
+                        {budget ? (
+                          <div className="mt-1">
+                            <BudgetBar used={g.total} budget={budget} />
+                          </div>
+                        ) : (
+                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
+                            <div className={`h-full rounded-full ${c ? "bg-brand-500" : "bg-amber-400"}`} style={{ width: `${pct}%` }} />
+                          </div>
+                        )}
                       </button>
                     </li>
                   );
@@ -231,15 +291,6 @@ export function Dashboard() {
         )}
       </section>
 
-      <Sheet open={adding} onClose={() => setAdding(false)} title="Catat transaksi">
-        <TxForm
-          onDone={(msg) => {
-            setAdding(false);
-            bump();
-            showToast(msg ?? "Tersimpan.");
-          }}
-        />
-      </Sheet>
     </div>
   );
 }

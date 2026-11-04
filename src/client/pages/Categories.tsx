@@ -2,7 +2,67 @@ import { useState } from "react";
 import { api } from "../lib/api";
 import { useAsync, useStore } from "../lib/store";
 import { ErrorNote, PageHeader, Sheet } from "../components/ui";
-import type { CategoryDTO, RuleDTO } from "../../shared/types";
+import type { CategoryDTO, RenameDTO, RuleDTO } from "../../shared/types";
+
+function RenamesSection() {
+  const { bump, version } = useStore();
+  const renames = useAsync(() => api<RenameDTO[]>("/renames"), [version]);
+  const [raw, setRaw] = useState("");
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <section className="card space-y-3">
+      <h2 className="font-semibold">Ganti nama merchant</h2>
+      <p className="text-sm text-stone-500">
+        Contoh: “9XY9 MPM ALFAMART IR H DJ” → “Alfamart”. Berlaku untuk transaksi lama dan email berikutnya. Bisa juga dari form transaksi
+        (“Ganti nama merchant”).
+      </p>
+      <form
+        className="grid grid-cols-[1fr_1fr_auto] gap-2"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setError(null);
+          try {
+            await api("/renames", { body: { raw, name } });
+            setRaw("");
+            setName("");
+            bump();
+          } catch (err) {
+            setError((err as Error).message);
+          }
+        }}
+      >
+        <input className="input" placeholder="mengandung, mis. alfamart" value={raw} onChange={(e) => setRaw(e.target.value)} aria-label="Nama asli mengandung" />
+        <input className="input" placeholder="nama baru" value={name} onChange={(e) => setName(e.target.value)} aria-label="Nama baru" />
+        <button className="btn-primary" disabled={!raw.trim() || !name.trim()}>Simpan</button>
+      </form>
+      <ErrorNote message={error} />
+      {renames.data && renames.data.length > 0 && (
+        <ul className="divide-y divide-stone-100 text-sm dark:divide-stone-800">
+          {renames.data.map((r) => (
+            <li key={r.id} className="flex items-center justify-between gap-2 py-2">
+              <span className="min-w-0 truncate">
+                <code className="rounded bg-stone-100 px-1.5 py-0.5 dark:bg-stone-800">{r.pattern}</code>
+                <span className="mx-2 text-stone-400">→</span>
+                {r.name}
+              </span>
+              <button
+                className="text-xs text-stone-400 hover:text-rose-600"
+                aria-label={`Hapus aturan ganti nama ${r.pattern}`}
+                onClick={async () => {
+                  await api(`/renames/${r.id}`, { method: "DELETE" });
+                  bump();
+                }}
+              >
+                Hapus
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 function CategoryEdit({ c, onDone }: { c: CategoryDTO; onDone: () => void }) {
   const { bump } = useStore();
@@ -164,6 +224,7 @@ export function Categories() {
         </ul>
       </section>
 
+      <RenamesSection />
       <Sheet open={!!editing} onClose={() => setEditing(null)} title="Ubah kategori">
         {editing && <CategoryEdit key={editing.id} c={editing} onDone={() => setEditing(null)} />}
       </Sheet>

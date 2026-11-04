@@ -49,3 +49,9 @@ body {
   @apply mb-1 block text-sm font-medium text-stone-600 dark:text-stone-400;
 }
 }
+
+/* Mode privasi: semua nominal diburamkan (input tetap terlihat saat mengetik). */
+html.privacy .tabular:not(input) {
+  filter: blur(7px);
+  user-select: none;
+}

@@ -144,6 +144,8 @@ export interface UndoPayload {
   /** categoryId null = aturan belum ada sebelumnya → dihapus */
   rule: { pattern: string; categoryId: number | null } | null;
   rules?: { pattern: string; categoryId: number | null }[];
+  /** transaksi yang dibuat dan harus dihapus saat dibatalkan */
+  deleteIds?: number[];
 }
 
 export interface ReportsDTO {
