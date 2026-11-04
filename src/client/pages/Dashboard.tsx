@@ -6,11 +6,12 @@ import { Money, MonthSwitcher, Spinner, ErrorNote, Sheet, useToast } from "../co
 import { Icon } from "../components/Icon";
 import { LineChart } from "../components/charts";
 import { openAdd } from "../components/Layout";
-import { TxForm, txTitle, undoAction } from "../components/tx";
+import { TxForm, undoAction } from "../components/tx";
+import { STATUS, TxTable } from "../components/TxTable";
 import { BudgetBar } from "./Budgets";
 import { Recurring } from "./Reports";
 import { formatRupiah, formatRupiahShort } from "../../shared/money";
-import { MONTHS_ID, parseYm, formatYm, wibParts } from "../../shared/time";
+import { MONTHS_ID, parseYm, formatYm } from "../../shared/time";
 import { providerLabel, type MonthSummaryDTO, type RecurringDTO, type ReportsDTO, type TransactionDTO } from "../../shared/types";
 
 interface ChecklistDTO {
@@ -91,30 +92,14 @@ function StatTile({ label, icon, value, accent = false, children }: { label: str
   );
 }
 
-const STATUS = {
-  ok: { label: "Tercatat", cls: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400" },
-  review: { label: "Perlu ditinjau", cls: "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-200" },
-  transfer: { label: "Transfer", cls: "bg-stone-100 text-stone-600 dark:bg-white/10 dark:text-stone-300" },
-};
-
 function Activities({ items, onOpen }: { items: TransactionDTO[]; onOpen: (t: TransactionDTO) => void }) {
-  const { category, account } = useStore();
   const [q, setQ] = useState("");
-  const accName = (id: number | null) => (id == null ? "?" : account(id)?.name ?? "?");
-  const status = (t: TransactionDTO) =>
-    t.type === "transfer" || t.type === "adjustment" ? STATUS.transfer : t.status === "review" ? STATUS.review : STATUS.ok;
-  const when = (t: TransactionDTO) => {
-    const p = wibParts(new Date(t.occurredAt));
-    return `${p.day} ${MONTHS_ID[p.month - 1].slice(0, 3)} ${p.year}, ${String(p.hour).padStart(2, "0")}.${String(p.minute).padStart(2, "0")}`;
-  };
-  const sign = (t: TransactionDTO) => (t.type === "expense" ? -t.amount : t.amount);
-  const icon = (t: TransactionDTO) => (t.type === "transfer" ? "⇄" : t.type === "adjustment" ? "±" : category(t.categoryId)?.icon ?? "?");
   return (
     <section className="card">
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h2 className="flex-1 text-lg font-bold">Aktivitas terbaru</h2>
         <form
-          className="relative w-full sm:w-56"
+          className="relative flex-1 sm:w-56 sm:flex-none"
           onSubmit={(e) => {
             e.preventDefault();
             navigate(`/transaksi?q=${encodeURIComponent(q.trim())}`);
@@ -131,70 +116,7 @@ function Activities({ items, onOpen }: { items: TransactionDTO[]; onOpen: (t: Tr
         <p className="py-6 text-center text-sm text-stone-500">Belum ada transaksi.</p>
       ) : (
         <>
-          <table className="hidden w-full text-sm md:table">
-            <thead>
-              <tr className="text-left text-[11px] tracking-wider text-stone-400 uppercase">
-                <th className="pb-3 font-semibold">Aktivitas</th>
-                <th className="pb-3 font-semibold">Kategori</th>
-                <th className="pb-3 text-right font-semibold">Nominal</th>
-                <th className="pb-3 pl-6 font-semibold">Status</th>
-                <th className="pb-3 font-semibold">Tanggal</th>
-                <th className="pb-3 text-right font-semibold">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100 dark:divide-white/5">
-              {items.map((t) => {
-                const st = status(t);
-                return (
-                  <tr key={t.id} className="cursor-pointer hover:bg-stone-50/70 dark:hover:bg-white/5" onClick={() => onOpen(t)}>
-                    <td className="py-3 pr-3">
-                      <span className="flex items-center gap-3">
-                        <span className="icon-tile text-base">{icon(t)}</span>
-                        <span className="min-w-0">
-                          <span className="block max-w-56 truncate font-semibold">{txTitle(t, accName)}</span>
-                          <span className="block text-xs text-stone-400">{accName(t.accountId)}</span>
-                        </span>
-                      </span>
-                    </td>
-                    <td className="py-3 pr-3 text-stone-500">{t.type === "transfer" ? "Transfer" : category(t.categoryId)?.name ?? "—"}</td>
-                    <td className="py-3 text-right whitespace-nowrap">
-                      <Money value={sign(t)} sign={t.type === "income"} className={`font-semibold ${t.type === "income" ? "text-emerald-600" : ""}`} />
-                    </td>
-                    <td className="py-3 pl-6">
-                      <span className={`badge whitespace-nowrap ${st.cls}`}>
-                        <span className="size-1.5 rounded-full bg-current" />
-                        {st.label}
-                      </span>
-                    </td>
-                    <td className="py-3 whitespace-nowrap text-stone-500">{when(t)}</td>
-                    <td className="py-3 text-right text-stone-400">
-                      <span className="inline-flex"><Icon name="more" /></span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <ul className="divide-y divide-stone-100 md:hidden dark:divide-white/5">
-            {items.map((t) => {
-              const st = status(t);
-              return (
-                <li key={t.id}>
-                  <button className="flex w-full items-center gap-3 py-3 text-left" onClick={() => onOpen(t)}>
-                    <span className="icon-tile text-base">{icon(t)}</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-semibold">{txTitle(t, accName)}</span>
-                      <span className="block truncate text-xs text-stone-400">{when(t)}</span>
-                    </span>
-                    <span className="shrink-0 text-right">
-                      <Money value={sign(t)} sign={t.type === "income"} className={`block font-semibold ${t.type === "income" ? "text-emerald-600" : ""}`} />
-                      <span className={`badge mt-1 ${st.cls}`}>{st.label}</span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <TxTable items={items} onOpen={onOpen} />
           <Link href="/transaksi" className="mt-3 block text-center text-sm font-semibold text-brand-700 dark:text-brand-500">
             Lihat semua transaksi
           </Link>

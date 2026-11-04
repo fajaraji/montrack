@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { useStore } from "../lib/store";
-import { Money, ErrorNote, type ToastAction } from "./ui";
+import { ErrorNote, type ToastAction } from "./ui";
 import { formatRupiah, parseRupiah } from "../../shared/money";
 import { wibDateKey, wibParts, fromWib, MONTHS_ID } from "../../shared/time";
 import type { CategoryDTO, TransactionDTO, TxType, UndoPayload } from "../../shared/types";
@@ -19,45 +19,6 @@ export function txTitle(t: TransactionDTO, accName: (id: number | null) => strin
   return t.description ?? TYPE_LABEL[t.type];
 }
 
-/** Tampilan nominal: pengeluaran negatif, pemasukan positif, transfer netral. */
-export function TxAmount({ t }: { t: TransactionDTO }) {
-  const dim = t.excluded ? "opacity-50 line-through" : "";
-  if (t.type === "expense") return <Money value={-t.amount} className={`font-medium ${dim}`} />;
-  if (t.type === "income") return <Money value={t.amount} sign className={`font-medium text-emerald-700 dark:text-emerald-400 ${dim}`} />;
-  if (t.type === "adjustment") return <Money value={t.amount} sign className="text-stone-500" />;
-  return <span className="tabular text-stone-500">{formatRupiah(t.amount)}</span>;
-}
-
-export function TxRow({ t, onClick }: { t: TransactionDTO; onClick?: () => void }) {
-  const { category, account } = useStore();
-  const cat = category(t.categoryId);
-  const accName = (id: number | null) => (id == null ? "?" : account(id)?.name ?? "?");
-  const p = wibParts(new Date(t.occurredAt));
-  const meta =
-    t.type === "transfer"
-      ? `Transfer · ${accName(t.accountId)} → ${accName(t.toAccountId)}`
-      : t.type === "adjustment"
-        ? `Penyesuaian saldo · ${accName(t.accountId)}`
-        : `${cat?.name ?? "Belum dikategorikan"} · ${accName(t.accountId)}`;
-  return (
-    <button onClick={onClick} className="flex w-full items-center gap-3 rounded-xl px-1 py-2.5 text-left hover:bg-stone-50 dark:hover:bg-stone-800/50">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-stone-100 text-lg dark:bg-stone-800" aria-hidden>
-        {t.type === "transfer" ? "⇄" : t.type === "adjustment" ? "±" : cat?.icon ?? "?"}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium">{txTitle(t, accName)}</span>
-        <span className="block truncate text-xs text-stone-500">
-          {meta} · {String(p.hour).padStart(2, "0")}.{String(p.minute).padStart(2, "0")}
-          {t.splitGroupId != null && <span> · dibagi</span>}
-          {t.excluded && <span> · tidak dihitung</span>}
-          {t.status === "review" && <span className="ml-1 text-amber-600">· perlu ditinjau</span>}
-        </span>
-      </span>
-      <TxAmount t={t} />
-    </button>
-  );
-}
-
 export function dayLabel(key: string): string {
   const today = wibDateKey(new Date());
   const yesterday = wibDateKey(new Date(Date.now() - 86400_000));
@@ -67,42 +28,6 @@ export function dayLabel(key: string): string {
   const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   const days = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
   return `${days[dow]}, ${d} ${MONTHS_ID[m - 1]}`;
-}
-
-export function TxList({ items, onSelect }: { items: TransactionDTO[]; onSelect: (t: TransactionDTO) => void }) {
-  const groups = useMemo(() => {
-    const m = new Map<string, TransactionDTO[]>();
-    for (const t of items) {
-      const k = wibDateKey(new Date(t.occurredAt));
-      m.set(k, [...(m.get(k) ?? []), t]);
-    }
-    return [...m.entries()];
-  }, [items]);
-  return (
-    <div className="space-y-4">
-      {groups.map(([day, list]) => {
-        const counted = list.filter((t) => !t.excluded);
-        const out = counted.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
-        const inc = counted.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
-        return (
-          <section key={day} className="card px-3 py-2">
-            <header className="flex items-center justify-between px-1 py-1.5 text-sm">
-              <span className="font-semibold">{dayLabel(day)}</span>
-              <span className="tabular text-stone-500">
-                {inc > 0 && <span className="mr-2 text-emerald-700 dark:text-emerald-400">+{formatRupiah(inc)}</span>}
-                {out > 0 && <span>−{formatRupiah(out)}</span>}
-              </span>
-            </header>
-            <div className="divide-y divide-stone-100 dark:divide-stone-800">
-              {list.map((t) => (
-                <TxRow key={t.id} t={t} onClick={() => onSelect(t)} />
-              ))}
-            </div>
-          </section>
-        );
-      })}
-    </div>
-  );
 }
 
 /**
