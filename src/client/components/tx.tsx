@@ -394,14 +394,16 @@ export function TxForm({
   initial,
   onDone,
   quick = false,
+  initialType,
 }: {
   initial?: TransactionDTO;
   onDone: (msg?: string, undo?: UndoPayload) => void;
   quick?: boolean;
+  initialType?: TxType;
 }) {
   const { accounts, bump } = useStore();
   const active = accounts.filter((a) => !a.archived);
-  const [type, setType] = useState<TxType>(initial?.type ?? "expense");
+  const [type, setType] = useState<TxType>(initial?.type ?? initialType ?? "expense");
   const [amount, setAmount] = useState(initial ? Math.abs(initial.amount).toLocaleString("id-ID") : "");
   const [negative, setNegative] = useState(initial ? initial.amount < 0 : false);
   const [accountId, setAccountId] = useState<number | null>(initial?.accountId ?? active[0]?.id ?? null);
@@ -418,7 +420,7 @@ export function TxForm({
   const [suggestions, setSuggestions] = useState<MerchantSuggestion[]>([]);
 
   useEffect(() => {
-    if (!quick || initial) return;
+    if (!quick || initial || initialType) return;
     api<MerchantSuggestion[]>("/suggestions/merchants").then(setSuggestions).catch(() => {});
   }, [quick, initial]);
 

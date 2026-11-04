@@ -46,7 +46,7 @@ function Routes({ onLogout }: { onLogout: () => void }) {
   else if (path.startsWith("/lainnya")) page = <More />;
   else page = <Dashboard />;
   return (
-    <Layout reviewCount={reviewCount} unread={notif.data?.unread ?? 0}>
+    <Layout reviewCount={reviewCount} unread={notif.data?.unread ?? 0} wide={path === "/" || path.startsWith("/laporan")}>
       {page}
     </Layout>
   );

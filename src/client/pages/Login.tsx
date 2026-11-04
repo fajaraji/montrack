@@ -9,7 +9,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <form
-        className="card w-full max-w-sm space-y-4 p-6"
+        className="card w-full max-w-sm space-y-5 p-8"
         onSubmit={async (e) => {
           e.preventDefault();
           setBusy(true);
@@ -25,7 +25,8 @@ export function Login({ onLogin }: { onLogin: () => void }) {
         }}
       >
         <div>
-          <h1 className="text-2xl font-bold text-brand-700 dark:text-brand-500">Montrack</h1>
+          <span className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-ink text-2xl font-extrabold text-white dark:bg-white dark:text-ink">M</span>
+          <h1 className="text-2xl font-extrabold tracking-tight">Montrack</h1>
           <p className="text-sm text-stone-500">Catatan keuangan yang terisi sendiri.</p>
         </div>
         <div>

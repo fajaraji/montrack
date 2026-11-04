@@ -20,10 +20,10 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-xl sm:rounded-3xl dark:bg-stone-900">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-[2rem] bg-white p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[2rem] dark:bg-[#18181b]">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{title}</h2>
+          <h2 className="text-lg font-bold">{title}</h2>
           <button className="btn-ghost -mr-2 px-2" onClick={onClose} aria-label="Tutup">
             ✕
           </button>
@@ -43,7 +43,7 @@ export function MonthSwitcher({ month, onChange }: { month: string; onChange: (m
       <button className="btn-ghost px-2.5" aria-label="Bulan sebelumnya" onClick={() => onChange(formatYm(addMonths(ym, -1)))}>
         ‹
       </button>
-      <span className="min-w-32 text-center font-medium">
+      <span className="min-w-32 text-center font-semibold">
         {MONTHS_ID[ym.month - 1]} {ym.year}
       </span>
       <button
@@ -79,7 +79,7 @@ export function Spinner() {
 export function PageHeader({ title, right }: { title: string; right?: ReactNode }) {
   return (
     <div className="mb-4 flex min-h-10 items-center justify-between gap-3">
-      <h1 className="text-xl font-semibold">{title}</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight">{title}</h1>
       {right}
     </div>
   );

@@ -1,13 +1,20 @@
 @import "tailwindcss";
 
+/*
+ * Tema Montrack: latar abu-abu lembut, kartu putih bersudut besar tanpa garis tepi,
+ * tombol utama hitam, aksen oranye untuk sorotan.
+ */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --color-brand-50: #f0fdfa;
-  --color-brand-100: #ccfbf1;
-  --color-brand-500: #14b8a6;
-  --color-brand-600: #0d9488;
-  --color-brand-700: #0f766e;
-  --color-brand-900: #134e4a;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --color-brand-50: #fff4ec;
+  --color-brand-100: #ffe3cf;
+  --color-brand-200: #ffc69f;
+  --color-brand-500: #f57c1f;
+  --color-brand-600: #ea6a0c;
+  --color-brand-700: #c2540a;
+  --color-brand-900: #6b2e06;
+  --color-surface: #f3f3f6;
+  --color-ink: #111114;
 }
 
 :root {
@@ -16,7 +23,7 @@
 
 html,
 body {
-  @apply bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100;
+  @apply bg-surface text-ink dark:bg-[#0c0c0e] dark:text-stone-100;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -25,29 +32,43 @@ body {
 }
 
 @layer components {
-.card {
-  @apply rounded-2xl border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900;
-}
+  .card {
+    @apply rounded-3xl bg-white p-5 shadow-[0_1px_2px_rgba(16,16,20,0.04)] dark:bg-[#18181b];
+  }
+  .card-accent {
+    @apply rounded-3xl bg-gradient-to-br from-[#f58a2a] to-[#ee6d0d] p-5 text-white shadow-[0_8px_24px_-12px_rgba(238,109,13,0.6)];
+  }
+  .icon-tile {
+    @apply flex size-10 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-stone-700 dark:bg-white/10 dark:text-stone-200;
+  }
 
-.input {
-  @apply w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-base outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20 dark:border-stone-700 dark:bg-stone-900;
-}
+  .input {
+    @apply w-full rounded-2xl border border-transparent bg-stone-100 px-4 py-2.5 text-base outline-none placeholder:text-stone-400 focus:border-stone-300 focus:bg-white focus:ring-4 focus:ring-stone-900/5 dark:bg-white/5 dark:focus:border-stone-600 dark:focus:bg-[#18181b];
+  }
 
-.btn-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition active:scale-[0.98] disabled:opacity-50 bg-brand-700 text-white hover:bg-brand-600;
-}
-.btn-ghost {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition active:scale-[0.98] disabled:opacity-50 text-stone-700 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800;
-}
-.btn-outline {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition active:scale-[0.98] disabled:opacity-50 border border-stone-300 text-stone-800 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-200 dark:hover:bg-stone-800;
-}
-.chip {
-  @apply inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm dark:border-stone-700 dark:bg-stone-900;
-}
-.label {
-  @apply mb-1 block text-sm font-medium text-stone-600 dark:text-stone-400;
-}
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-ink px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-stone-800 active:scale-[0.98] disabled:opacity-40 dark:bg-white dark:text-ink dark:hover:bg-stone-200;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium text-stone-700 transition hover:bg-stone-100 active:scale-[0.98] disabled:opacity-40 dark:text-stone-300 dark:hover:bg-white/10;
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-stone-200 bg-white px-5 py-2.5 text-sm font-semibold text-ink transition hover:bg-stone-50 active:scale-[0.98] disabled:opacity-40 dark:border-white/10 dark:bg-transparent dark:text-stone-100 dark:hover:bg-white/5;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm transition hover:border-stone-300 dark:border-white/10 dark:bg-white/5;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-stone-500 dark:text-stone-400;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+
+  /* Progress bar bergaris (seperti batas pengeluaran pada referensi). */
+  .bar-striped {
+    background-image: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.28) 0 6px, transparent 6px 12px);
+  }
 }
 
 /* Mode privasi: semua nominal diburamkan (input tetap terlihat saat mengetik). */

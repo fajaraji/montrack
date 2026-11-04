@@ -1,5 +1,5 @@
 // Service worker Montrack: aset statis di-cache, API selalu dari jaringan.
-const CACHE = "montrack-v2";
+const CACHE = "montrack-v3";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(["/", "/manifest.webmanifest", "/icon.svg"])));
