@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
+    "adhan": "^4.4.6",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.14",
     "pdfjs-dist": "^6.4.299",

@@ -16,6 +16,7 @@ import { Categories } from "./pages/Categories";
 import { Settings } from "./pages/Settings";
 import { Reports } from "./pages/Reports";
 import { Fees } from "./pages/Fees";
+import { Prayer } from "./pages/Prayer";
 import type { MonthSummaryDTO } from "../shared/types";
 
 function Routes({ onLogout }: { onLogout: () => void }) {
@@ -30,6 +31,7 @@ function Routes({ onLogout }: { onLogout: () => void }) {
   else if (path.startsWith("/laporan")) page = <Reports />;
   else if (path.startsWith("/akun")) page = <Accounts />;
   else if (path.startsWith("/biaya-rutin")) page = <Fees />;
+  else if (path.startsWith("/sholat")) page = <Prayer />;
   else if (path.startsWith("/impor")) page = <Import />;
   else if (path.startsWith("/kategori")) page = <Categories />;
   else if (path.startsWith("/pengaturan")) page = <Settings onLogout={onLogout} />;

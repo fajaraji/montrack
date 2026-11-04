@@ -12,6 +12,10 @@ const GROUPS = [
     ],
   },
   {
+    title: "Ibadah",
+    items: [{ href: "/sholat", icon: "moon", title: "Waktu sholat", desc: "Jadwal dari lokasimu" }],
+  },
+  {
     title: "Data",
     items: [
       { href: "/kategori", icon: "tag", title: "Kategori", desc: "Aturan & ganti nama" },

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { and, desc, eq, gte, ilike, lt, or, sql, inArray, type SQL } from "drizzle-orm";
 import type { DB } from "./db/client";
 import { accounts, categories, categoryRules, inboxEmails, transactions } from "./db/schema";
+import { registerPrayerRoutes } from "./routes/prayer";
 import { isLoggedIn, login, logout, requireIngestSecret, requireSession } from "./auth";
 import { monthSummary } from "./services/summary";
 import { listAccountsWithBalance } from "./services/balances";
@@ -143,6 +144,8 @@ export function createApp(getDb: (env: Bindings) => DB) {
     }
     return c.json({ results });
   });
+
+  registerPrayerRoutes(app);
 
   // ---------- Semua di bawah ini butuh login ----------
   app.use("*", requireSession);

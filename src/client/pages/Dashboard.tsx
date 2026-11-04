@@ -9,6 +9,7 @@ import { openAdd } from "../components/Layout";
 import { TxForm, undoAction } from "../components/tx";
 import { STATUS, TxTable } from "../components/TxTable";
 import { Recurring } from "./Reports";
+import { PrayerCard } from "./Prayer";
 import { formatRupiah, formatRupiahShort } from "../../shared/money";
 import { MONTHS_ID, parseYm, formatYm } from "../../shared/time";
 import { providerLabel, type MonthSummaryDTO, type RecurringDTO, type ReportsDTO, type TransactionDTO } from "../../shared/types";
@@ -160,6 +161,7 @@ export function Dashboard() {
       </div>
       {toastEl}
       <ErrorNote message={error} />
+      <PrayerCard />
       {checklist.data && (
         <Checklist
           c={checklist.data}

@@ -21,7 +21,7 @@ const NAV = [
 ];
 
 /** Halaman yang termasuk menu "Lainnya" (agar tab Lainnya tetap aktif). */
-const MORE = ["/lainnya", "/akun", "/biaya-rutin", "/impor", "/kategori", "/pengaturan"];
+const MORE = ["/lainnya", "/akun", "/biaya-rutin", "/sholat", "/impor", "/kategori", "/pengaturan"];
 
 export function Layout({
   children,
