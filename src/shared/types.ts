@@ -40,6 +40,7 @@ export interface CategoryDTO {
   kind: "expense" | "income";
   sort: number;
   archived: boolean;
+  monthlyBudget: number | null;
 }
 
 export interface RuleDTO {
@@ -62,6 +63,9 @@ export interface TransactionDTO {
   source: TxSource;
   status: TxStatus;
   emailId: number | null;
+  rawMerchant: string | null;
+  excluded: boolean;
+  splitGroupId: number | null;
 }
 
 export interface MonthSummaryDTO {
@@ -102,6 +106,8 @@ export interface InboxEmailDTO {
 export interface SettingsDTO {
   monthlyBudget: number | null;
   ownerNames: string[];
+  hasPin: boolean;
+  checklistDismissed: boolean;
 }
 
 /** Baris mutasi yang sudah dinormalisasi di browser sebelum dikirim ke server. */
@@ -133,7 +139,75 @@ export interface UndoPayload {
     description?: string | null;
     occurredAt?: string;
     status?: string;
+    excluded?: boolean;
   }[];
   /** categoryId null = aturan belum ada sebelumnya → dihapus */
   rule: { pattern: string; categoryId: number | null } | null;
+  rules?: { pattern: string; categoryId: number | null }[];
+}
+
+export interface ReportsDTO {
+  month: string;
+  trend: { month: string; expense: number; income: number }[];
+  categories: { categoryId: number | null; perMonth: number[]; current: number; average: number }[];
+  topMerchants: { name: string; total: number; count: number; categoryId: number | null }[];
+}
+
+export interface WeeklyRecapDTO {
+  weekStart: string; // YYYY-MM-DD (Senin)
+  weekEnd: string;
+  total: number;
+  prevTotal: number;
+  count: number;
+  topCategories: { categoryId: number | null; amount: number }[];
+  biggest: { merchant: string | null; amount: number; date: string } | null;
+}
+
+export interface RecurringDTO {
+  key: string;
+  name: string;
+  amount: number;
+  categoryId: number | null;
+  accountId: number | null;
+  lastDate: string;
+  nextDate: string;
+  occurrences: number;
+  /** negatif = sudah lewat jadwal */
+  daysUntil: number;
+}
+
+export interface GoalDTO {
+  id: number;
+  name: string;
+  icon: string;
+  target: number;
+  saved: number;
+  accountId: number | null;
+  accountName: string | null;
+  deadline: string | null;
+  archived: boolean;
+  progress: number;
+  pct: number;
+  monthsLeft: number | null;
+  perMonth: number | null;
+}
+
+export interface RenameDTO {
+  id: number;
+  pattern: string;
+  name: string;
+}
+
+export interface NotificationDTO {
+  id: number;
+  kind: string;
+  title: string;
+  body: string;
+  url: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface ReviewItemDTO extends TransactionDTO {
+  suggestions: number[];
 }

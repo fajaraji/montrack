@@ -17,70 +17,21 @@ export const MAX_EMAILS_PER_REQUEST = 4;
 import { importStatement } from "./services/importer";
 import { getSettings, updateSettings } from "./services/settings";
 import { monthRange, parseYm } from "../shared/time";
-import type { ImportRow, InboxEmailDTO, TransactionDTO, UndoPayload } from "../shared/types";
+import { HttpError, TX_TYPES, bad, errorText, int, str, toDTO } from "./http";
+import { registerExtraRoutes } from "./routes/extra";
+import type { ImportRow, InboxEmailDTO, UndoPayload } from "../shared/types";
 
 export interface Bindings {
   DATABASE_URL: string;
   APP_PASSWORD: string;
   SESSION_SECRET: string;
   INGEST_SECRET: string;
+  /** Web Push (opsional) */
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  APP_URL?: string;
 }
 export type AppEnv = { Bindings: Bindings; Variables: { db: DB } };
-
-/** Pesan error yang berguna: drizzle membungkus penyebab aslinya di `cause`. */
-function errorText(err: unknown): string {
-  const e = err as { message?: string; cause?: { message?: string } };
-  const cause = e?.cause?.message;
-  const msg = (e?.message ?? String(err)).split("\n")[0].slice(0, 160);
-  return cause ? `${cause} (${msg})` : msg;
-}
-
-class HttpError extends Error {
-  constructor(public status: 400 | 404, message: string) {
-    super(message);
-  }
-}
-const bad = (msg: string) => new HttpError(400, msg);
-
-const TX_TYPES = ["expense", "income", "transfer", "adjustment"] as const;
-
-function int(v: unknown, name: string, opts: { optional?: boolean; nullable?: boolean } = {}): number | null | undefined {
-  if (v === undefined) {
-    if (opts.optional) return undefined;
-    throw bad(`${name} wajib diisi`);
-  }
-  if (v === null || v === "") {
-    if (opts.nullable) return null;
-    throw bad(`${name} wajib diisi`);
-  }
-  const n = typeof v === "number" ? v : Number(v);
-  if (!Number.isFinite(n) || !Number.isInteger(n)) throw bad(`${name} harus angka bulat`);
-  return n;
-}
-
-function str(v: unknown, max = 200): string | null | undefined {
-  if (v === undefined) return undefined;
-  if (v === null) return null;
-  const s = String(v).trim();
-  return s ? s.slice(0, max) : null;
-}
-
-function toDTO(t: typeof transactions.$inferSelect): TransactionDTO {
-  return {
-    id: t.id,
-    type: t.type as TransactionDTO["type"],
-    amount: t.amount,
-    accountId: t.accountId,
-    toAccountId: t.toAccountId,
-    categoryId: t.categoryId,
-    merchant: t.merchant,
-    description: t.description,
-    occurredAt: t.occurredAt.toISOString(),
-    source: t.source as TransactionDTO["source"],
-    status: t.status as TransactionDTO["status"],
-    emailId: t.emailId,
-  };
-}
 
 /** Validasi & normalisasi body transaksi (create/update). */
 function txValues(body: Record<string, unknown>, partial: boolean) {
@@ -110,6 +61,7 @@ function txValues(body: Record<string, unknown>, partial: boolean) {
     if (body.status !== "ok" && body.status !== "review") throw bad("status tidak valid");
     v.status = body.status;
   }
+  if (body.excluded !== undefined) v.excluded = Boolean(body.excluded);
   return v;
 }
 
@@ -182,6 +134,8 @@ export function createApp(getDb: (env: Bindings) => DB) {
 
   // ---------- Semua di bawah ini butuh login ----------
   app.use("*", requireSession);
+
+  registerExtraRoutes(app);
 
   app.get("/summary", async (c) => c.json(await monthSummary(c.var.db, parseYm(c.req.query("month")))));
 
@@ -264,6 +218,10 @@ export function createApp(getDb: (env: Bindings) => DB) {
     if (b.name !== undefined) v.name = str(b.name, 40) ?? "Kategori";
     if (b.icon !== undefined) v.icon = str(b.icon, 8) ?? "•";
     if (b.archived !== undefined) v.archived = Boolean(b.archived);
+    if (b.monthlyBudget !== undefined) {
+      const n = int(b.monthlyBudget, "monthlyBudget", { nullable: true });
+      v.monthlyBudget = n && n > 0 ? n : null;
+    }
     const [row] = await c.var.db.update(categories).set(v).where(eq(categories.id, id)).returning();
     if (!row) throw new HttpError(404, "Kategori tidak ditemukan");
     return c.json(row);
@@ -363,12 +321,13 @@ export function createApp(getDb: (env: Bindings) => DB) {
           description: existing.description,
           occurredAt: existing.occurredAt.toISOString(),
           status: existing.status,
+          excluded: existing.excluded,
         },
       ],
       rule: null,
     };
     if (b.remember && t.categoryId && (t.type === "expense" || t.type === "income")) {
-      const r = await learnRule(c.var.db, t.merchant ?? t.description, t.categoryId, { exceptId: t.id });
+      const r = await learnRule(c.var.db, t.rawMerchant ?? t.merchant ?? t.description, t.categoryId, { exceptId: t.id });
       learned = r.applied;
       pattern = r.pattern;
       undo.transactions.push(...r.changed);
@@ -415,37 +374,15 @@ export function createApp(getDb: (env: Bindings) => DB) {
       if (prev.description !== undefined) set.description = str(prev.description, 500) ?? null;
       if (prev.occurredAt !== undefined) set.occurredAt = new Date(prev.occurredAt);
       if (prev.status === "ok" || prev.status === "review") set.status = prev.status;
+      if (prev.excluded !== undefined) set.excluded = Boolean(prev.excluded);
       await c.var.db.update(transactions).set(set).where(eq(transactions.id, id));
     }
-    if (b.rule?.pattern) {
-      if (b.rule.categoryId == null) {
-        await c.var.db.delete(categoryRules).where(eq(categoryRules.pattern, b.rule.pattern));
-      } else {
-        await c.var.db
-          .update(categoryRules)
-          .set({ categoryId: int(b.rule.categoryId, "categoryId")! })
-          .where(eq(categoryRules.pattern, b.rule.pattern));
-      }
+    for (const r of [...(b.rule ? [b.rule] : []), ...(b.rules ?? [])]) {
+      if (!r?.pattern) continue;
+      if (r.categoryId == null) await c.var.db.delete(categoryRules).where(eq(categoryRules.pattern, r.pattern));
+      else await c.var.db.update(categoryRules).set({ categoryId: int(r.categoryId, "categoryId")! }).where(eq(categoryRules.pattern, r.pattern));
     }
     return c.json({ ok: true, restored: b.transactions.length });
-  });
-
-  app.post("/transactions/bulk", async (c) => {
-    const b = await c.req.json<{ ids?: number[]; categoryId?: number | null; status?: string; delete?: boolean }>();
-    const ids = (b.ids ?? []).map(Number).filter(Number.isInteger);
-    if (!ids.length) throw bad("Tidak ada transaksi dipilih");
-    if (b.delete) {
-      await c.var.db.delete(transactions).where(inArray(transactions.id, ids));
-      return c.json({ ok: true, count: ids.length });
-    }
-    const set: Partial<typeof transactions.$inferInsert> = { updatedAt: new Date() };
-    if (b.categoryId !== undefined) {
-      set.categoryId = b.categoryId;
-      set.status = "ok";
-    }
-    if (b.status === "ok" || b.status === "review") set.status = b.status;
-    await c.var.db.update(transactions).set(set).where(inArray(transactions.id, ids));
-    return c.json({ ok: true, count: ids.length });
   });
 
   app.delete("/transactions/:id", async (c) => {
@@ -516,6 +453,7 @@ export function createApp(getDb: (env: Bindings) => DB) {
       if (!Array.isArray(b.ownerNames)) throw bad("ownerNames harus daftar");
       patch.ownerNames = b.ownerNames.map((s) => String(s).trim()).filter(Boolean).slice(0, 10);
     }
+    if (b.checklistDismissed !== undefined) patch.checklistDismissed = Boolean(b.checklistDismissed);
     return c.json(await updateSettings(c.var.db, patch));
   });
 

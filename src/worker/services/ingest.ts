@@ -4,6 +4,7 @@ import { accounts, categories, inboxEmails, transactions, type Account, type Inb
 import { parseEmail, type ParsedEmail } from "../parsers/email";
 import { htmlToText, toLines } from "../parsers/text";
 import { categorize, loadRules, type Rule } from "./categorize";
+import { applyRename, loadRenames, type Rename } from "./renames";
 import { getSettings } from "./settings";
 import { PROVIDERS } from "../../shared/types";
 
@@ -17,8 +18,12 @@ export class IngestContext {
   private owners?: string[];
   private cats?: Map<string, number>;
   private accs?: Account[];
+  private renames?: Rename[];
   constructor(private db: DB) {}
 
+  async getRenames() {
+    return (this.renames ??= await loadRenames(this.db));
+  }
   async getRules() {
     return (this.rules ??= await loadRules(this.db));
   }
@@ -205,6 +210,15 @@ export async function recordParsed(
       main = { ...base, type: "transfer", accountId: account.id, toAccountId: cash.id,
         merchant: "Tarik tunai", status: review ? "review" : "ok" };
       break;
+    }
+  }
+
+  // Ganti nama merchant sesuai aturan pengguna (nama asli tetap disimpan).
+  if (main.merchant) {
+    const renamed = applyRename(await cache.getRenames(), main.merchant);
+    if (renamed) {
+      main.rawMerchant = main.merchant;
+      main.merchant = renamed;
     }
   }
 

@@ -16,7 +16,7 @@ export function normalizeText(s: string | null | undefined): string {
 const NOISE_WORDS = new Set([
   "qris", "pembayaran", "payment", "bayar", "pay", "pt", "tbk", "cv", "ud", "toko", "merchant",
   "di", "ke", "via", "id", "idr", "rp", "trx", "transaksi", "purchase", "pembelian", "berhasil",
-  "trf", "transfer", "tf", "dari", "kepada", "to", "from", "debit", "kredit", "db", "cr",
+  "trf", "transfer", "tf", "dari", "kepada", "to", "from", "debit", "kredit", "db", "cr", "mpm",
 ]);
 
 /**
@@ -29,7 +29,8 @@ export function merchantKey(s: string | null | undefined): string {
     .toLowerCase()
     .replace(/[^\p{L}\p{N}&\s]+/gu, " ")
     .split(/\s+/)
-    .filter((w) => w && !NOISE_WORDS.has(w) && !/\d{3,}/.test(w) && !/^\d+$/.test(w));
+    // buang kata berangka (kode terminal/cabang, nomor referensi)
+    .filter((w) => w && !NOISE_WORDS.has(w) && !/\d/.test(w));
   return words.slice(0, 4).join(" ").trim();
 }
 

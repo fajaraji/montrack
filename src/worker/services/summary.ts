@@ -28,7 +28,7 @@ export async function monthSummary(db: DB, ym: Ym, now = new Date()): Promise<Mo
       occurredAt: transactions.occurredAt,
     })
     .from(transactions)
-    .where(and(gte(transactions.occurredAt, start), lt(transactions.occurredAt, end)));
+    .where(and(gte(transactions.occurredAt, start), lt(transactions.occurredAt, end), eq(transactions.excluded, false)));
 
   const dim = daysInMonth(ym);
   const nowP = wibParts(now);
@@ -59,6 +59,7 @@ export async function monthSummary(db: DB, ym: Ym, now = new Date()): Promise<Mo
     .where(
       and(
         eq(transactions.type, "expense"),
+        eq(transactions.excluded, false),
         gte(transactions.occurredAt, prevRange.start),
         lt(transactions.occurredAt, prevRange.end),
       ),

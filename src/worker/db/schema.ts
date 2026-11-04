@@ -34,6 +34,8 @@ export const categories = pgTable("categories", {
   kind: text("kind").notNull().default("expense"),
   sort: integer("sort").notNull().default(100),
   archived: boolean("archived").notNull().default(false),
+  /** anggaran bulanan kategori (rupiah), null = tanpa anggaran */
+  monthlyBudget: bigint("monthly_budget", { mode: "number" }),
 });
 
 /** Kata kunci merchant/deskripsi → kategori. */
@@ -112,6 +114,12 @@ export const transactions = pgTable(
     importBatchId: integer("import_batch_id"),
     /** kunci unik untuk mencegah duplikat dari sumber otomatis */
     fingerprint: text("fingerprint"),
+    /** nama merchant asli sebelum diganti nama oleh aturan */
+    rawMerchant: text("raw_merchant"),
+    /** tidak dihitung di ringkasan/laporan/anggaran (saldo tetap dihitung) */
+    excluded: boolean("excluded").notNull().default(false),
+    /** id transaksi asal bila transaksi ini hasil "bagi transaksi" */
+    splitGroupId: integer("split_group_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -136,6 +144,56 @@ export const importRows = pgTable(
   (t) => [uniqueIndex("import_rows_fingerprint_idx").on(t.fingerprint)],
 );
 
+/** Ganti nama merchant: pola (huruf kecil, substring) → nama tampilan. */
+export const merchantRenames = pgTable(
+  "merchant_renames",
+  {
+    id: serial("id").primaryKey(),
+    pattern: text("pattern").notNull(),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("merchant_renames_pattern_idx").on(t.pattern)],
+);
+
+/** Target tabungan. Progres = saldo akun tertaut, atau jumlah setoran manual. */
+export const goals = pgTable("goals", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  icon: text("icon").notNull().default("🎯"),
+  target: bigint("target", { mode: "number" }).notNull(),
+  saved: bigint("saved", { mode: "number" }).notNull().default(0),
+  accountId: integer("account_id").references(() => accounts.id, { onDelete: "set null" }),
+  /** YYYY-MM-DD */
+  deadline: text("deadline"),
+  archived: boolean("archived").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: serial("id").primaryKey(),
+    endpoint: text("endpoint").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("push_subscriptions_endpoint_idx").on(t.endpoint)],
+);
+
+/** Notifikasi di dalam aplikasi (juga isi untuk Web Push). */
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  /** recap | budget | bill */
+  kind: text("kind").notNull(),
+  /** kunci unik agar notifikasi yang sama tidak terkirim dua kali */
+  dedupeKey: text("dedupe_key").notNull().unique(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  url: text("url").notNull().default("/"),
+  read: boolean("read").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const settings = pgTable("settings", {
   key: text("key").primaryKey(),
   value: jsonb("value").notNull(),
@@ -147,3 +205,4 @@ export type CategoryRule = typeof categoryRules.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 export type InboxEmail = typeof inboxEmails.$inferSelect;
+export type Goal = typeof goals.$inferSelect;

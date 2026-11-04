@@ -14,7 +14,8 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "cf-typegen": "wrangler types",
     "local": "npm run build && tsx scripts/local-server.ts",
-    "local:demo": "npm run build && tsx scripts/local-server.ts --demo"
+    "local:demo": "npm run build && tsx scripts/local-server.ts --demo",
+    "vapid": "tsx scripts/vapid.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",

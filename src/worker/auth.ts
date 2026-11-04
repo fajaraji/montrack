@@ -4,7 +4,9 @@ import { sign, verify } from "hono/jwt";
 import type { AppEnv } from "./app";
 
 export const SESSION_COOKIE = "mt_session";
-const SESSION_DAYS = 30;
+/** Sesi diperpanjang otomatis setiap dipakai; hanya kedaluwarsa bila tidak dibuka selama ini. */
+const SESSION_DAYS = 180;
+const RENEW_AFTER_SECONDS = 24 * 3600;
 
 async function sha256(s: string): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
@@ -27,8 +29,13 @@ export async function login(c: Context<AppEnv>, password: string): Promise<boole
   const expected = requireSecret(c.env.APP_PASSWORD, "APP_PASSWORD");
   const secret = requireSecret(c.env.SESSION_SECRET, "SESSION_SECRET");
   if (!(await safeEqual(password, expected))) return false;
-  const exp = Math.floor(Date.now() / 1000) + SESSION_DAYS * 86400;
-  const token = await sign({ sub: "owner", exp }, secret, "HS256");
+  await issueSession(c, secret);
+  return true;
+}
+
+async function issueSession(c: Context<AppEnv>, secret: string) {
+  const now = Math.floor(Date.now() / 1000);
+  const token = await sign({ sub: "owner", iat: now, exp: now + SESSION_DAYS * 86400 }, secret, "HS256");
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
     secure: true,
@@ -36,7 +43,6 @@ export async function login(c: Context<AppEnv>, password: string): Promise<boole
     path: "/",
     maxAge: SESSION_DAYS * 86400,
   });
-  return true;
 }
 
 export function logout(c: Context<AppEnv>) {
@@ -47,7 +53,10 @@ export async function isLoggedIn(c: Context<AppEnv>): Promise<boolean> {
   const token = getCookie(c, SESSION_COOKIE);
   if (!token || !c.env.SESSION_SECRET) return false;
   try {
-    await verify(token, c.env.SESSION_SECRET, "HS256");
+    const payload = await verify(token, c.env.SESSION_SECRET, "HS256");
+    // Perpanjang otomatis (maks. sekali sehari) agar tidak perlu login ulang selama rutin dipakai.
+    const iat = typeof payload.iat === "number" ? payload.iat : 0;
+    if (Date.now() / 1000 - iat > RENEW_AFTER_SECONDS) await issueSession(c, c.env.SESSION_SECRET);
     return true;
   } catch {
     return false;
@@ -68,3 +77,14 @@ export const requireIngestSecret: MiddlewareHandler<AppEnv> = async (c, next) =>
   }
   await next();
 };
+
+/** Hash PIN dengan garam acak (PIN pendek, jadi juga dibatasi jumlah percobaannya). */
+export async function hashPin(pin: string, salt: string = crypto.randomUUID()): Promise<string> {
+  const bytes = await sha256(`${salt}:${pin}`);
+  return `${salt}:${[...bytes].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
+}
+
+export async function checkPin(pin: string, stored: string): Promise<boolean> {
+  const [salt] = stored.split(":");
+  return safeEqual(await hashPin(pin, salt), stored);
+}
