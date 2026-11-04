@@ -1,7 +1,6 @@
 import { and, gte, lt, sql, eq } from "drizzle-orm";
 import type { DB } from "../db/client";
 import { inboxEmails, transactions } from "../db/schema";
-import { getSettings } from "./settings";
 import { addMonths, daysInMonth, formatYm, monthRange, wibParts, type Ym } from "../../shared/time";
 import type { MonthSummaryDTO } from "../../shared/types";
 
@@ -73,15 +72,6 @@ export async function monthSummary(db: DB, ym: Ym, now = new Date()): Promise<Mo
     if (wibParts(r.occurredAt).day <= cutoffDay) prevExpenseSamePeriod += r.amount;
   }
 
-  const settings = await getSettings(db);
-  const budget = settings.monthlyBudget && settings.monthlyBudget > 0 ? settings.monthlyBudget : null;
-  const budgetRemaining = budget != null ? budget - expense : null;
-  let safePerDay: number | null = null;
-  if (budgetRemaining != null && (isCurrentMonth || isFuture)) {
-    const daysLeft = isCurrentMonth ? dim - nowP.day + 1 : dim;
-    safePerDay = Math.max(0, Math.floor(budgetRemaining / daysLeft));
-  }
-
   const [review] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(transactions)
@@ -105,9 +95,6 @@ export async function monthSummary(db: DB, ym: Ym, now = new Date()): Promise<Mo
     incomeByCategory: group(incomes),
     daily,
     transferTotal,
-    budget,
-    budgetRemaining,
-    safePerDay,
     reviewCount: Number(review?.n ?? 0),
     unparsedEmailCount: Number(unparsed?.n ?? 0),
   };

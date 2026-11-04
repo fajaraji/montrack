@@ -8,9 +8,7 @@ const GROUPS = [
     title: "Kelola uang",
     items: [
       { href: "/akun", icon: "wallet", title: "Akun & saldo", desc: "Rekening & e-wallet" },
-      { href: "/anggaran", icon: "pie", title: "Anggaran", desc: "Batas per bulan" },
-      { href: "/target", icon: "target", title: "Target", desc: "Tabungan & impian" },
-      { href: "/notifikasi", icon: "bell", title: "Notifikasi", desc: "Rekap & peringatan" },
+      { href: "/biaya-rutin", icon: "repeat", title: "Biaya rutin", desc: "Admin bulanan otomatis" },
     ],
   },
   {
@@ -19,7 +17,7 @@ const GROUPS = [
       { href: "/kategori", icon: "tag", title: "Kategori", desc: "Aturan & ganti nama" },
       { href: "/impor", icon: "upload", title: "Impor mutasi", desc: "PDF / CSV bank" },
       { href: "/api/export.csv", icon: "download", title: "Ekspor CSV", desc: "Unduh semua data", download: true },
-      { href: "/pengaturan", icon: "gear", title: "Pengaturan", desc: "Gmail, notifikasi" },
+      { href: "/pengaturan", icon: "gear", title: "Pengaturan", desc: "Nama pemilik, Gmail" },
     ],
   },
 ];

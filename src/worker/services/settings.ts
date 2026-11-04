@@ -3,15 +3,14 @@ import type { DB } from "../db/client";
 import { settings } from "../db/schema";
 import type { SettingsDTO } from "../../shared/types";
 
-const DEFAULTS: SettingsDTO = { monthlyBudget: null, ownerNames: [], checklistDismissed: false };
+const DEFAULTS: SettingsDTO = { ownerNames: [], checklistDismissed: false };
 /** Kunci yang boleh diubah lewat PATCH /settings. */
-const EDITABLE = new Set(["monthlyBudget", "ownerNames", "checklistDismissed"]);
+const EDITABLE = new Set(["ownerNames", "checklistDismissed"]);
 
 export async function getSettings(db: DB): Promise<SettingsDTO> {
   const rows = await db.select().from(settings);
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   return {
-    monthlyBudget: typeof map.monthlyBudget === "number" ? map.monthlyBudget : DEFAULTS.monthlyBudget,
     ownerNames: Array.isArray(map.ownerNames) ? (map.ownerNames as string[]) : DEFAULTS.ownerNames,
     checklistDismissed: map.checklistDismissed === true,
   };

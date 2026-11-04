@@ -8,7 +8,6 @@ import { LineChart } from "../components/charts";
 import { openAdd } from "../components/Layout";
 import { TxForm, undoAction } from "../components/tx";
 import { STATUS, TxTable } from "../components/TxTable";
-import { BudgetBar } from "./Budgets";
 import { Recurring } from "./Reports";
 import { formatRupiah, formatRupiahShort } from "../../shared/money";
 import { MONTHS_ID, parseYm, formatYm } from "../../shared/time";
@@ -295,45 +294,6 @@ export function Dashboard() {
           {/* Kolom kiri bawah */}
           <div className="space-y-5 lg:col-span-5">
             <section className="card">
-              <div className="flex items-center justify-between">
-                <h2 className="font-bold">Batas pengeluaran bulanan</h2>
-                <Link href="/anggaran" className="text-xs font-semibold text-brand-700 dark:text-brand-500">
-                  Atur
-                </Link>
-              </div>
-              {s.budget != null ? (
-                <>
-                  <div className="mt-4 h-3.5 overflow-hidden rounded-full bg-stone-100 dark:bg-white/10">
-                    <div
-                      className={`bar-striped h-full rounded-full ${s.expense > s.budget ? "bg-rose-500" : "bg-brand-500"}`}
-                      style={{ width: `${Math.min(100, (s.expense / s.budget) * 100)}%` }}
-                    />
-                  </div>
-                  <div className="mt-3 flex items-baseline justify-between gap-2 text-sm">
-                    <span>
-                      <span className="tabular font-bold">{formatRupiah(s.expense)}</span> <span className="text-stone-400">terpakai dari</span>
-                    </span>
-                    <span className="tabular text-stone-400">{formatRupiah(s.budget)}</span>
-                  </div>
-                  {s.safePerDay != null && s.budgetRemaining! >= 0 && (
-                    <p className="mt-2 text-xs text-stone-500">
-                      Aman dipakai <span className="tabular font-bold text-brand-700 dark:text-brand-500">{formatRupiah(s.safePerDay)}</span>/hari
-                    </p>
-                  )}
-                  {s.budgetRemaining! < 0 && <p className="mt-2 text-xs font-semibold text-rose-600">Lewat {formatRupiah(-s.budgetRemaining!)}</p>}
-                </>
-              ) : (
-                <p className="mt-2 text-sm text-stone-500">
-                  Belum ada batas.{" "}
-                  <Link href="/anggaran" className="font-semibold text-ink underline dark:text-white">
-                    Pasang anggaran
-                  </Link>{" "}
-                  agar tahu berapa yang aman dipakai per hari.
-                </p>
-              )}
-            </section>
-
-            <section className="card">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="font-bold">Per kategori</h2>
                 <Link href={`/transaksi?month=${month}&type=expense`} className="text-xs font-semibold text-brand-700 dark:text-brand-500">
@@ -347,7 +307,6 @@ export function Dashboard() {
                   {s.byCategory.slice(0, 6).map((g) => {
                     const c = category(g.categoryId);
                     const pct = s.expense ? (g.total / s.expense) * 100 : 0;
-                    const budget = s.isCurrentMonth ? c?.monthlyBudget ?? null : null;
                     return (
                       <li key={g.categoryId ?? "none"}>
                         <button className="w-full text-left" onClick={() => navigate(`/transaksi?month=${month}&type=expense&categoryId=${g.categoryId ?? "none"}`)}>
@@ -356,19 +315,15 @@ export function Dashboard() {
                             <span className="min-w-0 flex-1">
                               <span className="block truncate font-semibold">{c?.name ?? "Belum dikategorikan"}</span>
                               <span className="block text-xs text-stone-400">
-                                {g.count} transaksi{budget ? ` · batas ${formatRupiahShort(budget)}` : ` · ${Math.round(pct)}%`}
+                                {g.count} transaksi · {Math.round(pct)}%
                               </span>
                             </span>
                             <Money value={g.total} className="font-bold" />
                           </div>
                           <div className="mt-2">
-                            {budget ? (
-                              <BudgetBar used={g.total} budget={budget} />
-                            ) : (
-                              <div className="h-2 overflow-hidden rounded-full bg-stone-100 dark:bg-white/10">
-                                <div className={`h-full rounded-full ${c ? "bg-ink dark:bg-white" : "bg-brand-500"}`} style={{ width: `${pct}%` }} />
-                              </div>
-                            )}
+                            <div className="h-2 overflow-hidden rounded-full bg-stone-100 dark:bg-white/10">
+                              <div className={`h-full rounded-full ${c ? "bg-ink dark:bg-white" : "bg-brand-500"}`} style={{ width: `${pct}%` }} />
+                            </div>
                           </div>
                         </button>
                       </li>

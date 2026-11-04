@@ -19,6 +19,7 @@ import { getSettings, updateSettings } from "./services/settings";
 import { monthRange, parseYm } from "../shared/time";
 import { HttpError, TX_TYPES, bad, errorText, int, str, toDTO } from "./http";
 import { registerExtraRoutes } from "./routes/extra";
+import { runRecurringFees } from "./services/fees";
 import type { ImportRow, InboxEmailDTO, UndoPayload } from "../shared/types";
 
 export interface Bindings {
@@ -26,10 +27,6 @@ export interface Bindings {
   APP_PASSWORD: string;
   SESSION_SECRET: string;
   INGEST_SECRET: string;
-  /** Web Push (opsional) */
-  VAPID_PUBLIC_KEY?: string;
-  VAPID_PRIVATE_KEY?: string;
-  APP_URL?: string;
 }
 export type AppEnv = { Bindings: Bindings; Variables: { db: DB } };
 
@@ -152,7 +149,11 @@ export function createApp(getDb: (env: Bindings) => DB) {
 
   registerExtraRoutes(app);
 
-  app.get("/summary", async (c) => c.json(await monthSummary(c.var.db, parseYm(c.req.query("month")))));
+  app.get("/summary", async (c) => {
+    // Pastikan biaya rutin yang jatuh tempo sudah tercatat (cadangan bila cron belum jalan).
+    await runRecurringFees(c.var.db);
+    return c.json(await monthSummary(c.var.db, parseYm(c.req.query("month"))));
+  });
 
   // Akun
   app.get("/accounts", async (c) => c.json(await listAccountsWithBalance(c.var.db)));
@@ -469,7 +470,6 @@ export function createApp(getDb: (env: Bindings) => DB) {
   app.patch("/settings", async (c) => {
     const b = await c.req.json<Record<string, unknown>>();
     const patch: Record<string, unknown> = {};
-    if (b.monthlyBudget !== undefined) patch.monthlyBudget = int(b.monthlyBudget, "monthlyBudget", { nullable: true });
     if (b.ownerNames !== undefined) {
       if (!Array.isArray(b.ownerNames)) throw bad("ownerNames harus daftar");
       patch.ownerNames = b.ownerNames.map((s) => String(s).trim()).filter(Boolean).slice(0, 10);

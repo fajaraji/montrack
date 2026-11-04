@@ -141,10 +141,11 @@ export async function recordParsed(
   db: DB,
   p: ParsedEmail,
   ctx: { emailId: number | null; subject?: string; cache?: IngestContext; source?: "email" | "notification" },
-): Promise<{ status: "parsed" | "merged" | "duplicate"; ids: number[] }> {
+): Promise<{ status: "parsed" | "merged" | "duplicate" | "pending"; ids: number[] }> {
   const cache = ctx.cache ?? new IngestContext(db);
   const rules = await cache.getRules();
   const owners = await cache.getOwners();
+  if (p.kind === "flip_out" || p.kind === "flip_refund") return recordFlip(db, p, cache, rules, owners);
   const account = await cache.account(p.provider, p.last4);
   const review = p.confidence === "low";
   const base = {
@@ -319,6 +320,22 @@ export async function processEmail(db: DB, emailOrId: number | InboxEmail, cache
     return { emailId, status: r.status, transactionIds: [], reason: r.reason };
   }
   const rec = await recordParsed(db, r.parsed, { emailId, subject: email.subject, cache, source: isNotif ? "notification" : "email" });
+  if (rec.status === "pending") {
+    await db
+      .update(inboxEmails)
+      .set({ status: "unparsed", provider: r.parsed.provider, note: "Menunggu email transfer bank ke Flip; dibaca ulang otomatis." })
+      .where(eq(inboxEmails.id, emailId));
+    return { emailId, status: "unparsed", transactionIds: [], reason: "pending" };
+  }
+  // Transfer ke rekening Flip baru masuk → coba pasangkan email Flip yang sedang menunggu.
+  if (rec.status === "parsed" && /fliptech/i.test(r.parsed.counterparty ?? r.parsed.merchant ?? "")) {
+    const waiting = await db
+      .select()
+      .from(inboxEmails)
+      .where(and(eq(inboxEmails.provider, "flip"), eq(inboxEmails.status, "unparsed")))
+      .limit(3);
+    for (const w of waiting) await processEmail(db, w, cache);
+  }
   await db
     .update(inboxEmails)
     .set({
@@ -406,4 +423,102 @@ export async function ingestNotification(db: DB, n: IngestNotificationInput, cac
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key));
   const messageId = `notif:${[...new Uint8Array(digest)].slice(0, 12).map((b) => b.toString(16).padStart(2, "0")).join("")}`;
   return ingestEmail(db, { messageId, from: `notif:${app}`, subject: title, body: text, date }, cache);
+}
+
+const FLIP_CODE_MAX = 999; // kode unik Flip ditambahkan ke nominal yang ditransfer
+
+/**
+ * Pasangkan email Flip dengan transfer bank → rekening Flip (penerima "FLIPTECH…"):
+ *  - ke nama sendiri  → transfer ke akun bank tujuan (saldo keduanya benar)
+ *  - ke orang lain    → pengeluaran dengan nama penerima asli
+ *  - selisih kode unik → biaya terpisah
+ *  - refund            → transaksi asal & refund ditandai tidak dihitung (saldo kembali)
+ * Belum ada transfer ke Flip yang cocok → "pending", dibaca ulang saat transfernya masuk.
+ */
+async function recordFlip(
+  db: DB,
+  p: ParsedEmail,
+  cache: IngestContext,
+  rules: Rule[],
+  owners: string[],
+): Promise<{ status: "parsed" | "merged" | "duplicate" | "pending"; ids: number[] }> {
+  const at = p.occurredAt;
+  const refund = p.kind === "flip_refund";
+  const candidates = await db
+    .select()
+    .from(transactions)
+    .where(
+      and(
+        sql`(lower(coalesce(${transactions.merchant}, '')) like '%fliptech%' or lower(coalesce(${transactions.rawMerchant}, '')) like '%fliptech%')`,
+        sql`${transactions.type} in ('expense','transfer')`,
+        gte(transactions.amount, p.amount),
+        lte(transactions.amount, p.amount + (refund ? 0 : FLIP_CODE_MAX)),
+        gte(transactions.occurredAt, new Date(at.getTime() - (refund ? 7 : 3) * 86400_000)),
+        lte(transactions.occurredAt, new Date(at.getTime() + 3600_000)),
+        sql`coalesce(${transactions.description}, '') not like 'via Flip%'`,
+        sql`${transactions.excluded} = false`,
+      ),
+    );
+  const f = candidates.sort((a, b) => Math.abs(a.occurredAt.getTime() - at.getTime()) - Math.abs(b.occurredAt.getTime() - at.getTime()))[0];
+  const ref = p.reference ?? `${p.amount}:${Math.floor(at.getTime() / 60000)}`;
+
+  if (refund) {
+    const accountId = f?.accountId ?? (await cache.account(p.targetBank ?? "bni")).id;
+    const inserted = await insertTx(db, {
+      type: "income",
+      amount: p.amount,
+      accountId,
+      merchant: "Refund Flip",
+      description: f ? "Dana Flip dikembalikan (transaksi dibatalkan)" : "Refund Flip",
+      categoryId: await cache.categoryId("Refund & Cashback"),
+      occurredAt: at,
+      source: "email",
+      status: f ? "ok" : "review",
+      excluded: !!f,
+      fingerprint: `flip:refund:${ref}`,
+    });
+    if (!inserted) return { status: "duplicate", ids: [] };
+    if (f) {
+      await db
+        .update(transactions)
+        .set({ excluded: true, status: "ok", description: "via Flip — dibatalkan, dana dikembalikan", updatedAt: new Date() })
+        .where(eq(transactions.id, f.id));
+    }
+    return { status: "parsed", ids: [inserted.id] };
+  }
+
+  if (!f) return { status: "pending", ids: [] };
+  const bankAcc = p.targetBank ? await cache.account(p.targetBank) : null;
+  const own = isOwner(p.counterparty, owners);
+  const fee = f.amount - p.amount;
+  const via = `via Flip ke ${bankAcc?.name ?? "bank tujuan"}`;
+  if (own && bankAcc && bankAcc.id !== f.accountId) {
+    await db
+      .update(transactions)
+      .set({ type: "transfer", amount: p.amount, toAccountId: bankAcc.id, categoryId: null, merchant: p.counterparty, rawMerchant: f.rawMerchant ?? f.merchant, description: `${via} (rekening sendiri)`, status: "ok", updatedAt: new Date() })
+      .where(eq(transactions.id, f.id));
+  } else {
+    const categoryId = categorize(rules, p.counterparty) ?? (await cache.categoryId("Transfer ke Orang Lain"));
+    await db
+      .update(transactions)
+      .set({ type: "expense", amount: p.amount, toAccountId: null, categoryId, merchant: p.counterparty, rawMerchant: f.rawMerchant ?? f.merchant, description: via, status: "review", updatedAt: new Date() })
+      .where(eq(transactions.id, f.id));
+  }
+  const ids = [f.id];
+  if (fee > 0) {
+    const feeTx = await insertTx(db, {
+      type: "expense",
+      amount: fee,
+      accountId: f.accountId,
+      merchant: "Biaya Flip (kode unik)",
+      description: `Selisih transfer ke Flip untuk ${p.counterparty ?? "transfer"}`,
+      categoryId: await cache.categoryId("Biaya Bank & Admin"),
+      occurredAt: f.occurredAt,
+      source: "email",
+      status: "ok",
+      fingerprint: `flip:fee:${ref}`,
+    });
+    if (feeTx) ids.push(feeTx.id);
+  }
+  return { status: "merged", ids };
 }

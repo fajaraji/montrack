@@ -1,5 +1,5 @@
 export type TxType = "expense" | "income" | "transfer" | "adjustment";
-export type TxSource = "manual" | "email" | "import" | "notification";
+export type TxSource = "manual" | "email" | "import" | "notification" | "recurring";
 export type TxStatus = "ok" | "review";
 export type AccountKind = "bank" | "ewallet" | "cash" | "other";
 
@@ -85,9 +85,6 @@ export interface MonthSummaryDTO {
   incomeByCategory: { categoryId: number | null; total: number; count: number }[];
   daily: number[]; // pengeluaran per tanggal, index 0 = tgl 1
   transferTotal: number;
-  budget: number | null;
-  budgetRemaining: number | null;
-  safePerDay: number | null;
   reviewCount: number;
   unparsedEmailCount: number;
 }
@@ -105,7 +102,6 @@ export interface InboxEmailDTO {
 }
 
 export interface SettingsDTO {
-  monthlyBudget: number | null;
   ownerNames: string[];
   checklistDismissed: boolean;
 }
@@ -178,38 +174,23 @@ export interface RecurringDTO {
   daysUntil: number;
 }
 
-export interface GoalDTO {
-  id: number;
-  name: string;
-  icon: string;
-  target: number;
-  saved: number;
-  accountId: number | null;
-  accountName: string | null;
-  deadline: string | null;
-  archived: boolean;
-  progress: number;
-  pct: number;
-  monthsLeft: number | null;
-  perMonth: number | null;
-}
-
 export interface RenameDTO {
   id: number;
   pattern: string;
   name: string;
 }
 
-export interface NotificationDTO {
-  id: number;
-  kind: string;
-  title: string;
-  body: string;
-  url: string;
-  read: boolean;
-  createdAt: string;
-}
-
 export interface ReviewItemDTO extends TransactionDTO {
   suggestions: number[];
+}
+
+export interface FeeDTO {
+  id: number;
+  name: string;
+  amount: number;
+  accountId: number;
+  categoryId: number | null;
+  dayOfMonth: number;
+  startMonth: string;
+  active: boolean;
 }

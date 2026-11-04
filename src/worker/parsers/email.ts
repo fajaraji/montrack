@@ -9,7 +9,9 @@ export type ParsedKind =
   | "topup_in" //     e-wallet menerima top-up (sumber belum tentu diketahui)
   | "transfer_out" // transfer keluar ke rekening/nama lain
   | "transfer_in" //  transfer masuk dari rekening/nama lain
-  | "withdraw"; //    tarik tunai
+  | "withdraw" //     tarik tunai
+  | "flip_out" //     Flip: transfer ke tujuan berhasil (dipasangkan dengan transfer ke rekening Flip)
+  | "flip_refund"; // Flip: dana dikembalikan
 
 export interface EmailInput {
   from: string;
@@ -178,10 +180,11 @@ export function parseEmail(input: EmailInput): ParseResult {
   if (!provider) {
     return { ok: false, status: "unparsed", provider: null, reason: "Pengirim tidak dikenali." };
   }
-  if (provider.id === "flip") {
-    // Format email Flip belum dikenali dari contoh asli; jangan ditebak agar tidak dobel dengan transfer BNI → Flip.
-    return { ok: false, status: "unparsed", provider: "flip", reason: "Format email Flip belum dikenali (menunggu contoh asli)." };
+  if (provider.id === "jago") {
+    // Jago tidak mengirim email per transaksi; email dari jago.com = promosi/info akun.
+    return { ok: false, status: "ignored", provider: "jago", reason: "Email info/promosi Jago (transaksi Jago dibaca dari notifikasi HP)." };
   }
+  if (provider.id === "flip") return parseFlip(input.subject, lines, input.date);
 
   const kindInfo = detectKind(`${input.subject}\n${text.slice(0, 1500)}`, provider.ewallet);
   if (!kindInfo) {
@@ -309,4 +312,43 @@ function detectTargetBank(lines: string[]): string | null {
   const window = i >= 0 ? lines.slice(i + 1, i + 4) : lines;
   const bankLine = window.find((l) => /•|\*{3,}|\d{6,}/.test(l) && /[a-z]/i.test(l));
   return bankFromText(bankLine ?? findField(lines, ["Bank Tujuan", "Bank Penerima"]));
+}
+
+/**
+ * Email Flip (format asli, Nov 2026):
+ *  - "Informasi transfer ke X"     → instruksi bayar (diabaikan)
+ *  - "Transfer ke X berhasil"      → Nama Tujuan, Bank Tujuan, Nominal, Waktu Terkirim, ID Transaksi
+ *  - "Transaksi refund berhasil"   → Nama/Bank Tujuan Refund, Jumlah Transfer
+ */
+function parseFlip(subject: string, lines: string[], fallback: Date): ParseResult {
+  if (/^informasi transfer/i.test(subject)) {
+    return { ok: false, status: "ignored", provider: "flip", reason: "Instruksi pembayaran Flip, bukan transaksi." };
+  }
+  const refund = /refund/i.test(subject);
+  if (!refund && !/berhasil/i.test(subject)) {
+    return { ok: false, status: "ignored", provider: "flip", reason: "Email info Flip." };
+  }
+  const amount = findAmount(lines, refund ? ["Jumlah Transfer", "Nominal"] : ["Nominal", "Jumlah Transfer"]);
+  if (!amount) return { ok: false, status: "unparsed", provider: "flip", reason: "Nominal Flip tidak ditemukan." };
+  const when = parseIndoDate(findField(lines, ["Waktu Terkirim", "Waktu"], { valuePattern: /\d/ }));
+  const name = cleanName(findField(lines, refund ? ["Nama Tujuan Refund", "Nama Tujuan"] : ["Nama Tujuan", "Tujuan"]));
+  const bank = bankFromText(findField(lines, refund ? ["Bank Tujuan Refund", "Bank Tujuan"] : ["Bank Tujuan"]));
+  return {
+    ok: true,
+    parsed: {
+      provider: "flip",
+      kind: refund ? "flip_refund" : "flip_out",
+      amount,
+      fee: 0,
+      merchant: null,
+      counterparty: name?.replace(/^SDR\.?\s+/i, "") ?? null,
+      target: null,
+      targetBank: bank,
+      occurredAt: when && Math.abs(when.getTime() - fallback.getTime()) < 40 * 86400_000 ? when : fallback,
+      reference: cleanRef(findField(lines, ["ID Transaksi"], { valuePattern: /[A-Za-z0-9]{6,}/ })?.replace(/^#/, "") ?? null),
+      last4: null,
+      confidence: "high",
+      notes: [],
+    },
+  };
 }

@@ -1,5 +1,5 @@
 // Service worker Montrack: aset statis di-cache, API selalu dari jaringan.
-const CACHE = "montrack-v3";
+const CACHE = "montrack-v4";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(["/", "/manifest.webmanifest", "/icon.svg"])));
@@ -47,53 +47,4 @@ self.addEventListener("fetch", (e) => {
       ),
     );
   }
-});
-
-// Web Push: server hanya mengirim "colekan" tanpa isi; ambil isi notifikasi terbaru dari API.
-self.addEventListener("push", (e) => {
-  e.waitUntil(
-    (async () => {
-      let title = "Montrack";
-      let body = "Ada pembaruan keuanganmu.";
-      let url = "/notifikasi";
-      try {
-        const res = await fetch("/api/notifications?limit=1", { credentials: "include" });
-        if (res.ok) {
-          const data = await res.json();
-          const n = data.items && data.items[0];
-          if (n) {
-            title = n.title;
-            body = n.body;
-            url = n.url || url;
-          }
-        }
-      } catch (_) {
-        /* tetap tampilkan notifikasi umum */
-      }
-      await self.registration.showNotification(title, {
-        body,
-        icon: "/icon-192.png",
-        badge: "/icon-192.png",
-        data: { url },
-        tag: "montrack",
-        renotify: true,
-      });
-    })(),
-  );
-});
-
-self.addEventListener("notificationclick", (e) => {
-  e.notification.close();
-  const url = (e.notification.data && e.notification.data.url) || "/";
-  e.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
-      for (const c of list) {
-        if ("focus" in c) {
-          c.navigate(url);
-          return c.focus();
-        }
-      }
-      return self.clients.openWindow(url);
-    }),
-  );
 });

@@ -15,6 +15,13 @@
       "when": 1793786556122,
       "tag": "0001_wave123",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793819475551,
+      "tag": "0002_recurring_fees",
+      "breakpoints": true
     }
   ]
 }

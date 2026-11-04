@@ -1,6 +1,6 @@
 import { and, eq, gte, sql, isNotNull } from "drizzle-orm";
 import type { DB } from "../db/client";
-import { accounts, categories, inboxEmails, transactions } from "../db/schema";
+import { accounts, inboxEmails, transactions } from "../db/schema";
 import { getSettings } from "./settings";
 
 export interface ChecklistDTO {
@@ -21,17 +21,12 @@ export async function getChecklist(db: DB): Promise<ChecklistDTO> {
     .select({ n: sql<number>`count(*)::int` })
     .from(inboxEmails)
     .where(gte(inboxEmails.createdAt, new Date(Date.now() - 7 * 86400_000)));
-  const [budgeted] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(categories)
-    .where(isNotNull(categories.monthlyBudget));
   return {
     dismissed: s.checklistDismissed,
     items: [
       { id: "email", label: "Email bank/e-wallet masuk otomatis", done: Number(recent?.n ?? 0) > 0, href: "/pengaturan", hint: "Pasang Google Apps Script (7 hari terakhir belum ada email masuk)." },
       { id: "owner", label: "Isi nama pemilik rekening", done: s.ownerNames.length > 0, href: "/pengaturan", hint: "Agar transfer ke rekening sendiri tidak dihitung pengeluaran." },
       { id: "balance", label: "Sesuaikan saldo setiap akun", done: balancesSet, href: "/akun", hint: "Akun yang dibuat otomatis belum tahu saldo awalnya." },
-      { id: "budget", label: "Pasang anggaran", done: s.monthlyBudget != null || Number(budgeted?.n ?? 0) > 0, href: "/anggaran", hint: "Total per bulan atau per kategori." },
     ],
   };
 }

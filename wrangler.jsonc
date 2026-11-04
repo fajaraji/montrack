@@ -9,10 +9,8 @@
     "run_worker_first": ["/api/*"]
   },
   "observability": { "enabled": true },
-  // Rekap mingguan (Senin 08.00 WIB) & cek anggaran/tagihan (20.00 WIB)
-  "triggers": { "crons": ["0 13 * * *", "0 1 * * 1"] },
-  "vars": { "APP_URL": "https://montrack.fajaraji2515.workers.dev" }
+  // Catat biaya rutin setiap hari pukul 00.05 WIB
+  "triggers": { "crons": ["5 17 * * *"] }
   // Secret (diisi lewat `wrangler secret put`):
-  // DATABASE_URL, APP_PASSWORD, SESSION_SECRET, INGEST_SECRET,
-  // VAPID_PUBLIC_KEY & VAPID_PRIVATE_KEY (opsional, untuk notifikasi; buat dengan `npm run vapid`)
+  // DATABASE_URL, APP_PASSWORD, SESSION_SECRET, INGEST_SECRET
 }

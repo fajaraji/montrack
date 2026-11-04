@@ -21,17 +21,15 @@ const NAV = [
 ];
 
 /** Halaman yang termasuk menu "Lainnya" (agar tab Lainnya tetap aktif). */
-const MORE = ["/lainnya", "/akun", "/anggaran", "/target", "/impor", "/kategori", "/pengaturan", "/notifikasi"];
+const MORE = ["/lainnya", "/akun", "/biaya-rutin", "/impor", "/kategori", "/pengaturan"];
 
 export function Layout({
   children,
   reviewCount,
-  unread,
   wide = false,
 }: {
   children: ReactNode;
   reviewCount: number;
-  unread: number;
   /** halaman dasbor memakai lebar penuh; halaman lain dibatasi agar form tetap nyaman */
   wide?: boolean;
 }) {
@@ -66,14 +64,6 @@ export function Layout({
       >
         <Icon name={privacy ? "eyeOff" : "eye"} />
       </button>
-      <Link
-        href="/notifikasi"
-        className="relative flex size-9 items-center justify-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white"
-        aria-label={`Notifikasi${unread ? `, ${unread} belum dibaca` : ""}`}
-      >
-        <Icon name="bell" />
-        {unread > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-brand-600 px-1 text-[10px] leading-4 font-bold text-white">{unread}</span>}
-      </Link>
     </div>
   );
 

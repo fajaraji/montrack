@@ -8,10 +8,11 @@ Pencatat keuangan pribadi yang **terisi sendiri** dari email bukti bayar bank & 
 - **Impor mutasi PDF/CSV** untuk transaksi tanpa email (biaya admin bulanan, bunga, auto-debit). Transaksi yang sudah tercatat dari email dicocokkan, jadi tidak dobel.
 - **Tinjau cepat**: saran 3 kategori per transaksi, centang banyak sekaligus, dan tombol **Batalkan** untuk setiap perubahan.
 - **Ganti nama merchant** ("9XY9 MPM ALFAMART…" → "Alfamart"), **bagi transaksi** ke beberapa kategori, dan **abaikan dari laporan** (reimburse/titipan).
-- **Anggaran** total & per kategori, **Laporan** tren 6 bulan, merchant terbesar, rekap mingguan, dan **deteksi tagihan/langganan** bulanan.
-- **Target tabungan** (setoran manual atau mengikuti saldo akun), **ekspor CSV**, **mode privasi** (sembunyikan nominal).
+- **Laporan** tren 6 bulan, kategori vs rata-rata, merchant terbesar, rekap mingguan, dan **deteksi tagihan/langganan** bulanan.
+- **Biaya rutin** (mis. admin rekening): nominal, tanggal, dan akun bisa diubah kapan saja; dicatat otomatis tiap bulan.
+- **Ekspor CSV** dan **mode privasi** (sembunyikan nominal).
 - **Login sekali**: sesi 180 hari yang diperpanjang otomatis.
-- **Notifikasi HP** (Web Push): rekap Senin pagi, anggaran 80%/100%, tagihan besok.
+- **Notifikasi HP → Montrack** lewat MacroDroid untuk transaksi tanpa email (mis. Jago), dan **Flip** dipasangkan otomatis dengan transfer bank ke Flip.
 - Web app + **PWA** (bisa dipasang di Android lewat Chrome). Berjalan di **Cloudflare Workers + Neon Postgres**, gratis.
 
 ## Coba dulu di laptop (tanpa akun apa pun)
@@ -97,16 +98,7 @@ Aplikasi web tidak bisa membaca notifikasi HP, jadi notifikasi diteruskan oleh *
 
 Pembacaannya longgar (nominal "Rp…" + kata kunci bayar/terima/top up). Transaksi yang sama dari email dan notifikasi hanya dicatat sekali.
 
-### 5. Push notification ke HP (opsional)
-Buat kunci VAPID sekali:
-
-```bash
-npm run vapid
-```
-
-Simpan kedua nilainya sebagai secret Worker (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`) lewat dashboard Cloudflare (**montrack → Settings → Variables and Secrets**, tipe *Secret*) atau `npx wrangler secret put`. Lalu di aplikasi: **Lainnya → Pengaturan → Aktifkan notifikasi**. Jadwal: setiap hari 20.00 WIB (anggaran & tagihan) dan Senin 08.00 WIB (rekap mingguan).
-
-### 6. Pemakaian pertama
+### 5. Pemakaian pertama
 1. **Lainnya → Pengaturan → Nama pemilik rekening**: isi namamu seperti yang tertulis di rekening. Transfer ke atau dari nama ini dicatat sebagai *transfer antar rekening sendiri*.
 2. **Akun**: akun BRI/BNI/GoPay dst. dibuat otomatis saat email pertama masuk. Klik **Sesuaikan** lalu isi saldo sebenarnya, supaya saldo akurat. Selisihnya dicatat sebagai *penyesuaian*, bukan pengeluaran.
 3. **Tinjau**: pilih kategori untuk transaksi yang belum dikenali, cukup sekali per merchant.

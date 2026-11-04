@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { disablePush, enablePush, pushState, type PushState } from "../lib/push";
 import { api } from "../lib/api";
 import { useAsync, useStore } from "../lib/store";
 import { ErrorNote, PageHeader } from "../components/ui";
@@ -61,7 +60,6 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
         <button className="btn-primary">{saved ? "Tersimpan ✓" : "Simpan"}</button>
       </form>
 
-      <PushSection />
 
       <section className="card space-y-2 text-sm">
         <h2 className="text-base font-semibold">Ekspor data</h2>
@@ -137,48 +135,5 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
         Keluar
       </button>
     </div>
-  );
-}
-
-function PushSection() {
-  const [state, setState] = useState<PushState | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
-  useEffect(() => {
-    pushState().then(setState).catch(() => setState("unsupported"));
-  }, []);
-  const label: Record<PushState, string> = {
-    unsupported: "Browser ini belum mendukung notifikasi. Di Android, buka lewat Chrome lalu pasang sebagai aplikasi (menu ⋮ › Instal aplikasi).",
-    unconfigured: "Notifikasi belum dikonfigurasi di server (secret VAPID belum diisi).",
-    denied: "Izin notifikasi ditolak. Aktifkan lewat pengaturan situs di browser.",
-    off: "Terima rekap mingguan (Senin pagi), peringatan anggaran 80%/100%, dan pengingat tagihan rutin.",
-    on: "Notifikasi aktif di perangkat ini.",
-  };
-  return (
-    <section className="card space-y-3 text-sm">
-      <h2 className="text-base font-semibold">Notifikasi di HP</h2>
-      <p className="text-stone-500">{state ? label[state] : "Memeriksa…"}</p>
-      {state === "off" && (
-        <button className="btn-primary" onClick={async () => setState(await enablePush().catch(() => "off" as const))}>
-          Aktifkan notifikasi
-        </button>
-      )}
-      {state === "on" && (
-        <div className="flex gap-2">
-          <button
-            className="btn-outline"
-            onClick={async () => {
-              const r = await api<{ sent: number }>("/push/test", { method: "POST" });
-              setMsg(r.sent ? "Notifikasi uji dikirim." : "Gagal mengirim; coba aktifkan ulang.");
-            }}
-          >
-            Kirim uji
-          </button>
-          <button className="btn-ghost" onClick={async () => setState(await disablePush())}>
-            Matikan
-          </button>
-        </div>
-      )}
-      {msg && <p className="text-xs text-stone-500">{msg}</p>}
-    </section>
   );
 }

@@ -194,6 +194,23 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Biaya tetap bulanan (mis. admin rekening) yang dicatat otomatis. Bisa diubah kapan saja. */
+export const recurringFees = pgTable("recurring_fees", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  amount: bigint("amount", { mode: "number" }).notNull(),
+  accountId: integer("account_id")
+    .notNull()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  categoryId: integer("category_id").references(() => categories.id, { onDelete: "set null" }),
+  /** tanggal 1–31 (bulan yang lebih pendek memakai tanggal terakhirnya) */
+  dayOfMonth: integer("day_of_month").notNull(),
+  /** YYYY-MM: bulan pertama yang dicatat */
+  startMonth: text("start_month").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const settings = pgTable("settings", {
   key: text("key").primaryKey(),
   value: jsonb("value").notNull(),
@@ -206,3 +223,4 @@ export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 export type InboxEmail = typeof inboxEmails.$inferSelect;
 export type Goal = typeof goals.$inferSelect;
+export type RecurringFee = typeof recurringFees.$inferSelect;

@@ -1,14 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { webcrypto } from "node:crypto";
 import { createApp, type Bindings } from "../src/worker/app";
 import { createTestDb } from "./testDb";
 import type { DB } from "../src/worker/db/client";
 import { EMAILS } from "./fixtures";
-import { dailyChecks, vapidJwt, weeklyRecapNotification } from "../src/worker/services/push";
+import { runRecurringFees } from "../src/worker/services/fees";
 import { detectRecurring } from "../src/worker/services/recurring";
 import { fromWib } from "../src/shared/time";
 import type {
-  CategoryDTO, ChecklistLike, GoalDTO, MonthSummaryDTO, ReportsDTO, ReviewItemDTO, TransactionDTO,
+  CategoryDTO, ChecklistLike, FeeDTO, MonthSummaryDTO, ReportsDTO, ReviewItemDTO, TransactionDTO,
 } from "./types";
 
 const env: Bindings = {
@@ -120,9 +119,8 @@ describe("abaikan dari laporan, ekspor, checklist", () => {
     expect(c.items.find((i) => i.id === "owner")!.done).toBe(false);
     await call("PATCH", "/settings", { ownerNames: ["Budi"] });
     await call("POST", `/accounts/${accountId}/adjust`, { actualBalance: 100000 });
-    await call("PATCH", `/categories/${cat("Makan & Minum")}`, { monthlyBudget: 1500000 });
     c = (await call<ChecklistLike>("GET", "/checklist")).json;
-    for (const id of ["owner", "balance", "budget"]) expect(c.items.find((i) => i.id === id)!.done).toBe(true);
+    for (const id of ["owner", "balance"]) expect(c.items.find((i) => i.id === id)!.done).toBe(true);
     await call("PATCH", "/settings", { checklistDismissed: true });
     expect((await call<ChecklistLike>("GET", "/checklist")).json.dismissed).toBe(true);
   });
@@ -161,46 +159,28 @@ describe("laporan, tagihan rutin, bagi transaksi, target", () => {
     expect(back.json).toMatchObject({ amount: 100000, splitGroupId: null });
     expect((await call<TransactionDTO[]>("GET", "/transactions")).json).toHaveLength(1);
   });
-  it("target tabungan: setoran manual & akun tertaut", async () => {
-    const g = (await call<{ id: number }>("POST", "/goals", { name: "Dana darurat", target: 1000000, deadline: "2027-12-31" })).json;
-    await call("POST", `/goals/${g.id}/deposit`, { amount: 250000 });
-    const tab = (await call<{ id: number }>("POST", "/accounts", { name: "Tabungan", provider: "bni", openingBalance: 400000 })).json;
-    await call("POST", "/goals", { name: "Liburan", target: 800000, accountId: tab.id });
-    const list = (await call<GoalDTO[]>("GET", "/goals")).json;
-    expect(list[0]).toMatchObject({ progress: 250000, pct: 25 });
-    expect(list[0].perMonth).toBeGreaterThan(0);
-    expect(list[1]).toMatchObject({ progress: 400000, pct: 50, accountName: "Tabungan" });
-  });
 });
 
-describe("notifikasi", () => {
-  it("peringatan anggaran 80% & 100% sekali saja", async () => {
-    await call("PATCH", `/categories/${cat("Makan & Minum")}`, { monthlyBudget: 100000 });
-    await tx("Makan", 85000, new Date().toISOString(), { categoryId: cat("Makan & Minum") });
-    expect(await dailyChecks(db)).toBe(1);
-    expect(await dailyChecks(db)).toBe(0);
-    await tx("Makan lagi", 20000, new Date().toISOString(), { categoryId: cat("Makan & Minum") });
-    expect(await dailyChecks(db)).toBe(1);
-    const n = (await call<{ unread: number; items: { title: string }[] }>("GET", "/notifications")).json;
-    expect(n.unread).toBe(2);
-    expect(n.items[0].title).toMatch(/terlewati/);
-    await call("POST", "/notifications/read-all");
-    expect((await call<{ unread: number }>("GET", "/notifications")).json.unread).toBe(0);
+describe("biaya rutin", () => {
+  it("dicatat sekali per bulan saat jatuh tempo; nominal baru hanya berlaku ke depan", async () => {
+    const created = await call<{ fee: FeeDTO; recorded: number }>("POST", "/fees", { name: "Admin BNI", amount: 12500, accountId, categoryId: cat("Biaya Bank & Admin"), dayOfMonth: 31, startNextMonth: true });
+    expect(created.status).toBe(201);
+    const id = created.json.fee.id;
+    // atur bulan mulai ke Okt 2026 agar bisa diuji di tanggal tertentu
+    await db.execute(`update recurring_fees set start_month = '2026-10' where id = ${id}`);
+    expect(await runRecurringFees(db, new Date("2026-10-30T12:00:00Z"))).toBe(0); // belum akhir bulan
+    expect(await runRecurringFees(db, new Date("2026-10-31T05:00:00Z"))).toBe(1); // 31 Okt
+    expect(await runRecurringFees(db, new Date("2026-10-31T09:00:00Z"))).toBe(0); // tidak dobel
+    await call("PATCH", `/fees/${id}`, { amount: 15000 });
+    // November: 30 hari → dicatat tanggal 30 dengan nominal baru
+    expect(await runRecurringFees(db, new Date("2026-11-30T05:00:00Z"))).toBe(1);
+    const list = (await call<TransactionDTO[]>("GET", "/transactions")).json.filter((t) => t.source === "recurring");
+    expect(list.map((t) => t.amount).sort()).toEqual([12500, 15000]);
+    await call("PATCH", `/fees/${id}`, { active: false });
+    expect(await runRecurringFees(db, new Date("2026-12-31T05:00:00Z"))).toBe(0);
   });
-  it("rekap mingguan", async () => {
-    const now = fromWib(2026, 11, 2, 8); // Senin
-    await tx("Belanja", 70000, fromWib(2026, 10, 28, 12).toISOString());
-    expect(await weeklyRecapNotification(db, now)).toBe(true);
-    expect(await weeklyRecapNotification(db, now)).toBe(false);
-  });
-  it("JWT VAPID ditandatangani ES256 yang valid", async () => {
-    const pair = await webcrypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
-    const pub = Buffer.from(await webcrypto.subtle.exportKey("raw", pair.publicKey)).toString("base64url");
-    const d = (await webcrypto.subtle.exportKey("jwk", pair.privateKey)).d!;
-    const jwt = await vapidJwt({ VAPID_PUBLIC_KEY: pub, VAPID_PRIVATE_KEY: d, APP_URL: "https://x.workers.dev" }, "https://fcm.googleapis.com");
-    const [h, p, s] = jwt.split(".");
-    expect(JSON.parse(Buffer.from(p, "base64url").toString())).toMatchObject({ aud: "https://fcm.googleapis.com", sub: "https://x.workers.dev" });
-    const ok = await webcrypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, pair.publicKey, Buffer.from(s, "base64url"), new TextEncoder().encode(`${h}.${p}`));
-    expect(ok).toBe(true);
+  it("validasi", async () => {
+    expect((await call("POST", "/fees", { name: "x", amount: 0, accountId, dayOfMonth: 1 })).status).toBe(400);
+    expect((await call("POST", "/fees", { name: "x", amount: 100, accountId, dayOfMonth: 32 })).status).toBe(400);
   });
 });

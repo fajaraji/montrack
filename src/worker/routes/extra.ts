@@ -1,7 +1,8 @@
 import type { Hono } from "hono";
 import { and, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import type { AppEnv } from "../app";
-import { goals, notifications, pushSubscriptions, transactions } from "../db/schema";
+import { recurringFees, transactions } from "../db/schema";
+import { listFees, runRecurringFees, startMonthFor } from "../services/fees";
 import { HttpError, bad, int, str, toDTO } from "../http";
 import { learnRule } from "../services/categorize";
 import { suggestCategories } from "../services/suggest";
@@ -11,10 +12,8 @@ import { getChecklist } from "../services/checklist";
 import { buildReports, weekStartWib, weeklyRecap } from "../services/reports";
 import { detectRecurring } from "../services/recurring";
 import { splitTransaction, unsplitTransaction } from "../services/split";
-import { listGoals } from "../services/goals";
-import { latestNotifications, notify, pokeAll, unreadCount } from "../services/push";
 import { parseYm, fromWib } from "../../shared/time";
-import type { NotificationDTO, ReviewItemDTO, UndoPayload } from "../../shared/types";
+import type { ReviewItemDTO, UndoPayload } from "../../shared/types";
 
 export function registerExtraRoutes(app: Hono<AppEnv>) {
   // ---------- Tinjau ----------
@@ -169,86 +168,49 @@ export function registerExtraRoutes(app: Hono<AppEnv>) {
     return c.json(group.map(toDTO));
   });
 
-  // ---------- Target tabungan ----------
-  app.get("/goals", async (c) => c.json(await listGoals(c.var.db)));
-  const goalValues = (b: Record<string, unknown>, partial: boolean) => {
-    const v: Partial<typeof goals.$inferInsert> = {};
+
+
+  // ---------- Biaya rutin ----------
+  app.get("/fees", async (c) => c.json(await listFees(c.var.db)));
+  const feeValues = (b: Record<string, unknown>, partial: boolean) => {
+    const v: Partial<typeof recurringFees.$inferInsert> = {};
     if (b.name !== undefined || !partial) {
       const name = str(b.name, 60);
-      if (!name) throw bad("Nama target wajib");
+      if (!name) throw bad("Nama biaya wajib");
       v.name = name;
     }
-    if (b.icon !== undefined) v.icon = str(b.icon, 8) ?? "🎯";
-    if (b.target !== undefined || !partial) {
-      const t = int(b.target, "target")!;
-      if (t <= 0) throw bad("Target harus lebih dari 0");
-      v.target = t;
+    if (b.amount !== undefined || !partial) {
+      const a = int(b.amount, "amount")!;
+      if (a <= 0) throw bad("Nominal harus lebih dari 0");
+      v.amount = a;
     }
-    if (b.saved !== undefined) v.saved = Math.max(0, int(b.saved, "saved") ?? 0);
-    if (b.accountId !== undefined) v.accountId = int(b.accountId, "accountId", { nullable: true });
-    if (b.deadline !== undefined) {
-      const d = str(b.deadline, 10);
-      if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw bad("Tenggat tidak valid");
-      v.deadline = d ?? null;
+    if (b.accountId !== undefined || !partial) v.accountId = int(b.accountId, "accountId")!;
+    if (b.categoryId !== undefined) v.categoryId = int(b.categoryId, "categoryId", { nullable: true }) ?? null;
+    if (b.dayOfMonth !== undefined || !partial) {
+      const d = int(b.dayOfMonth, "dayOfMonth")!;
+      if (d < 1 || d > 31) throw bad("Tanggal harus 1–31");
+      v.dayOfMonth = d;
     }
-    if (b.archived !== undefined) v.archived = Boolean(b.archived);
+    if (b.active !== undefined) v.active = Boolean(b.active);
     return v;
   };
-  app.post("/goals", async (c) => {
-    const [g] = await c.var.db.insert(goals).values(goalValues(await c.req.json(), false) as typeof goals.$inferInsert).returning();
-    return c.json(g, 201);
-  });
-  app.patch("/goals/:id", async (c) => {
-    const [g] = await c.var.db.update(goals).set(goalValues(await c.req.json(), true)).where(eq(goals.id, Number(c.req.param("id")))).returning();
-    if (!g) throw new HttpError(404, "Target tidak ditemukan");
-    return c.json(g);
-  });
-  app.post("/goals/:id/deposit", async (c) => {
-    const amount = int((await c.req.json<{ amount?: number }>()).amount, "amount")!;
-    const [g] = await c.var.db
-      .update(goals)
-      .set({ saved: sql`greatest(0, ${goals.saved} + ${amount})` })
-      .where(eq(goals.id, Number(c.req.param("id"))))
+  app.post("/fees", async (c) => {
+    const b = await c.req.json<Record<string, unknown>>();
+    const v = feeValues(b, false) as typeof recurringFees.$inferInsert;
+    const [f] = await c.var.db
+      .insert(recurringFees)
+      .values({ ...v, startMonth: startMonthFor(Boolean(b.startNextMonth)) })
       .returning();
-    if (!g) throw new HttpError(404, "Target tidak ditemukan");
-    return c.json(g);
+    const recorded = await runRecurringFees(c.var.db);
+    return c.json({ fee: f, recorded }, 201);
   });
-  app.delete("/goals/:id", async (c) => {
-    await c.var.db.delete(goals).where(eq(goals.id, Number(c.req.param("id"))));
+  app.patch("/fees/:id", async (c) => {
+    const [f] = await c.var.db.update(recurringFees).set(feeValues(await c.req.json(), true)).where(eq(recurringFees.id, Number(c.req.param("id")))).returning();
+    if (!f) throw new HttpError(404, "Biaya tidak ditemukan");
+    return c.json(f);
+  });
+  app.delete("/fees/:id", async (c) => {
+    await c.var.db.delete(recurringFees).where(eq(recurringFees.id, Number(c.req.param("id"))));
     return c.json({ ok: true });
   });
-
-  // ---------- Notifikasi & Web Push ----------
-  app.get("/push/key", (c) => c.json({ key: c.env.VAPID_PUBLIC_KEY ?? null }));
-  app.post("/push/subscribe", async (c) => {
-    const b = await c.req.json<{ endpoint?: string }>();
-    const endpoint = String(b.endpoint ?? "");
-    if (!/^https:\/\//.test(endpoint) || endpoint.length > 1000) throw bad("Endpoint tidak valid");
-    await c.var.db.insert(pushSubscriptions).values({ endpoint }).onConflictDoNothing();
-    return c.json({ ok: true });
-  });
-  app.delete("/push/subscribe", async (c) => {
-    const b = await c.req.json<{ endpoint?: string }>().catch(() => ({}) as { endpoint?: string });
-    if (b.endpoint) await c.var.db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, b.endpoint));
-    return c.json({ ok: true });
-  });
-  app.post("/push/test", async (c) => {
-    await notify(c.var.db, {
-      kind: "test",
-      dedupeKey: `test:${Date.now()}`,
-      title: "Notifikasi Montrack aktif",
-      body: "Kamu akan menerima rekap mingguan dan peringatan anggaran di sini.",
-    });
-    return c.json(await pokeAll(c.var.db, c.env));
-  });
-  app.get("/notifications", async (c) => {
-    const rows = await latestNotifications(c.var.db, Math.min(Number(c.req.query("limit")) || 30, 100));
-    const out: NotificationDTO[] = rows.map((r) => ({ id: r.id, kind: r.kind, title: r.title, body: r.body, url: r.url, read: r.read, createdAt: r.createdAt.toISOString() }));
-    return c.json({ unread: await unreadCount(c.var.db), items: out });
-  });
-  app.post("/notifications/read-all", async (c) => {
-    await c.var.db.update(notifications).set({ read: true }).where(eq(notifications.read, false));
-    return c.json({ ok: true });
-  });
-
 }

@@ -250,3 +250,54 @@ export const JAGO_NOTIF = {
   paid: { app: "Jago", title: "Jago", text: "You've paid Rp20.000 with GoPay Tabungan Transaction. Need help? Contact Tanya Jago at 1500 746." },
   received: { app: "Jago", title: "Jago", text: "You've received Rp100.000 from NAMA PEMILIK" },
 };
+
+/** Struktur email Flip asli (nilai rekaan). */
+export const FLIP = {
+  success: (name: string, bank: string, nominal: string, when = "02 Nov 2026 21:10 WIB", id = "ST1234567890ABCDE") => ({
+    from: "Flip <no-reply@flip.id>",
+    subject: `Transfer ke ${name} berhasil`,
+    body: `BUKTI TRANSFER
+Halo, Kak Nama Pemilik.
+Transfer ke tujuan berhasil diproses. Ini detail transaksinya:
+ID Transaksi
+#${id}
+Waktu Terkirim
+${when}
+Nama Tujuan
+${name}
+Bank Tujuan
+${bank}
+Nomor Rekening Tujuan
+123456789012
+Nominal
+${nominal}
+Makasih udah pakai Flip!`,
+  }),
+  info: {
+    from: "Flip <no-reply@flip.id>",
+    subject: "Informasi transfer ke ORANG LAIN",
+    body: `INFORMASI TRANSAKSI
+Jumlah Transfer
+Rp 495.475
+Transfer ke Bank
+BNI`,
+  },
+  refund: (amount: string, when = "03 November 2026, 09:14") => ({
+    from: "Flip <no-reply@flip.id>",
+    subject: "Transaksi refund berhasil",
+    body: `Halo, Kak Nama Pemilik.
+Yeay, uangmu berhasil di-refund! Ini detail transaksinya:
+ID Transaksi
+#RF1234567890QIMRF
+Waktu Terkirim
+${when}
+Nama Tujuan Refund
+SDR NAMA PEMILIK
+Bank Tujuan Refund
+BNI
+Jumlah Transfer
+${amount}
+Bank Pengirim
+artajasa`,
+  }),
+};
