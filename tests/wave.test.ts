@@ -47,21 +47,10 @@ beforeEach(async () => {
   cats = (await call<CategoryDTO[]>("GET", "/categories")).json;
 });
 
-describe("sesi & PIN", () => {
+describe("sesi", () => {
   it("cookie sesi berlaku 180 hari", async () => {
     const r = await call("POST", "/auth/login", { password: env.APP_PASSWORD });
     expect(r.res.headers.get("set-cookie")).toMatch(/Max-Age=15552000/);
-  });
-  it("pasang, verifikasi, salah 5x mengakhiri sesi, ganti butuh PIN lama", async () => {
-    expect((await call("POST", "/auth/pin", { pin: "12a" })).status).toBe(400);
-    expect((await call("POST", "/auth/pin", { pin: "1234" })).status).toBe(200);
-    expect((await call<{ hasPin: boolean }>("GET", "/settings")).json.hasPin).toBe(true);
-    expect((await call("POST", "/auth/pin/verify", { pin: "1234" })).status).toBe(200);
-    expect((await call("POST", "/auth/pin", { pin: "9999", currentPin: "0000" })).status).toBe(401);
-    for (let i = 0; i < 4; i++) expect((await call("POST", "/auth/pin/verify", { pin: "0000" })).status).toBe(401);
-    const last = await call<{ locked: boolean }>("POST", "/auth/pin/verify", { pin: "0000" });
-    expect(last.json.locked).toBe(true);
-    expect(last.res.headers.get("set-cookie")).toMatch(/mt_session=;/);
   });
 });
 

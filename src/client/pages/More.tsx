@@ -19,7 +19,7 @@ const GROUPS = [
       { href: "/kategori", icon: "tag", title: "Kategori", desc: "Aturan & ganti nama" },
       { href: "/impor", icon: "upload", title: "Impor mutasi", desc: "PDF / CSV bank" },
       { href: "/api/export.csv", icon: "download", title: "Ekspor CSV", desc: "Unduh semua data", download: true },
-      { href: "/pengaturan", icon: "gear", title: "Pengaturan", desc: "PIN, Gmail, push" },
+      { href: "/pengaturan", icon: "gear", title: "Pengaturan", desc: "Gmail, notifikasi" },
     ],
   },
 ];

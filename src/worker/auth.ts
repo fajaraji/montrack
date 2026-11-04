@@ -77,14 +77,3 @@ export const requireIngestSecret: MiddlewareHandler<AppEnv> = async (c, next) =>
   }
   await next();
 };
-
-/** Hash PIN dengan garam acak (PIN pendek, jadi juga dibatasi jumlah percobaannya). */
-export async function hashPin(pin: string, salt: string = crypto.randomUUID()): Promise<string> {
-  const bytes = await sha256(`${salt}:${pin}`);
-  return `${salt}:${[...bytes].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
-}
-
-export async function checkPin(pin: string, stored: string): Promise<boolean> {
-  const [salt] = stored.split(":");
-  return safeEqual(await hashPin(pin, salt), stored);
-}

@@ -4,7 +4,6 @@ import { useLocation } from "./lib/router";
 import { StoreProvider, useAsync, useStore } from "./lib/store";
 import { applyPrivacy, privacyOn } from "./lib/prefs";
 import { Layout } from "./components/Layout";
-import { PinLock } from "./components/PinLock";
 import { Spinner } from "./components/ui";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
@@ -19,11 +18,7 @@ import { Reports } from "./pages/Reports";
 import { Budgets } from "./pages/Budgets";
 import { Goals } from "./pages/Goals";
 import { Notifications } from "./pages/Notifications";
-import type { MonthSummaryDTO, SettingsDTO } from "../shared/types";
-
-/** Kunci lagi bila aplikasi ditinggal di latar belakang lebih dari ini. */
-const RELOCK_MS = 5 * 60 * 1000;
-const UNLOCK_KEY = "mt:unlocked";
+import type { MonthSummaryDTO } from "../shared/types";
 
 function Routes({ onLogout }: { onLogout: () => void }) {
   const { path } = useLocation();
@@ -52,27 +47,8 @@ function Routes({ onLogout }: { onLogout: () => void }) {
   );
 }
 
-function wasUnlockedRecently(): boolean {
-  try {
-    const t = Number(sessionStorage.getItem(UNLOCK_KEY) ?? 0);
-    return Date.now() - t < RELOCK_MS;
-  } catch {
-    return false;
-  }
-}
-function markUnlocked() {
-  try {
-    sessionStorage.setItem(UNLOCK_KEY, String(Date.now()));
-  } catch {
-    /* abaikan */
-  }
-}
-
 export function App() {
   const [auth, setAuth] = useState<"loading" | "in" | "out">("loading");
-  const [locked, setLocked] = useState(false);
-  const [hasPin, setHasPin] = useState(false);
-
   useEffect(() => {
     applyPrivacy(privacyOn());
     api<{ loggedIn: boolean }>("/auth/me")
@@ -81,49 +57,10 @@ export function App() {
     return onUnauthorized(() => setAuth("out"));
   }, []);
 
-  // Setelah login: cek apakah PIN aktif; kunci saat aplikasi baru dibuka.
-  useEffect(() => {
-    if (auth !== "in") return;
-    api<SettingsDTO>("/settings")
-      .then((s) => {
-        setHasPin(s.hasPin);
-        if (s.hasPin && !wasUnlockedRecently()) setLocked(true);
-      })
-      .catch(() => {});
-  }, [auth]);
-
-  // Kunci lagi setelah lama di latar belakang; perbarui penanda saat aktif.
-  useEffect(() => {
-    if (!hasPin) return;
-    const onVis = () => {
-      if (document.visibilityState === "hidden") {
-        if (!locked) markUnlocked();
-      } else if (!wasUnlockedRecently()) setLocked(true);
-    };
-    document.addEventListener("visibilitychange", onVis);
-    const tick = setInterval(() => !locked && markUnlocked(), 30_000);
-    return () => {
-      document.removeEventListener("visibilitychange", onVis);
-      clearInterval(tick);
-    };
-  }, [hasPin, locked]);
-
   if (auth === "loading") return <Spinner />;
-  if (auth === "out") return <Login onLogin={() => { markUnlocked(); setAuth("in"); }} />;
+  if (auth === "out") return <Login onLogin={() => setAuth("in")} />;
   return (
     <StoreProvider>
-      {locked && (
-        <PinLock
-          onUnlock={() => {
-            markUnlocked();
-            setLocked(false);
-          }}
-          onLoggedOut={() => {
-            setLocked(false);
-            setAuth("out");
-          }}
-        />
-      )}
       <Routes onLogout={() => setAuth("out")} />
     </StoreProvider>
   );

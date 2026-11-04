@@ -106,7 +106,6 @@ export interface InboxEmailDTO {
 export interface SettingsDTO {
   monthlyBudget: number | null;
   ownerNames: string[];
-  hasPin: boolean;
   checklistDismissed: boolean;
 }
 

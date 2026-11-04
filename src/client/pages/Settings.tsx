@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { disablePush, enablePush, pushState, type PushState } from "../lib/push";
 import { api } from "../lib/api";
 import { useAsync, useStore } from "../lib/store";
-import { ErrorNote, PageHeader, useToast } from "../components/ui";
+import { ErrorNote, PageHeader } from "../components/ui";
 import { providerLabel, type InboxEmailDTO, type SettingsDTO } from "../../shared/types";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -61,7 +61,6 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
         <button className="btn-primary">{saved ? "Tersimpan ✓" : "Simpan"}</button>
       </form>
 
-      <PinSection hasPin={settings.data?.hasPin ?? false} />
       <PushSection />
 
       <section className="card space-y-2 text-sm">
@@ -138,67 +137,6 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
         Keluar
       </button>
     </div>
-  );
-}
-
-function PinSection({ hasPin }: { hasPin: boolean }) {
-  const { bump } = useStore();
-  const [pin, setPin] = useState("");
-  const [current, setCurrent] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const { toastEl, showToast } = useToast();
-  return (
-    <section className="card space-y-3 text-sm">
-      {toastEl}
-      <h2 className="text-base font-semibold">PIN aplikasi</h2>
-      <p className="text-stone-500">
-        Sesi login berlaku 180 hari dan diperpanjang otomatis, jadi password hanya diminta di perangkat baru. PIN dipakai untuk membuka aplikasi
-        dengan cepat (diminta lagi setelah 5 menit tidak dipakai). Salah 5 kali = harus login ulang dengan password.
-      </p>
-      {hasPin && (
-        <input className="input tabular" type="password" inputMode="numeric" maxLength={6} placeholder="PIN saat ini" value={current} onChange={(e) => setCurrent(e.target.value.replace(/\D/g, ""))} aria-label="PIN saat ini" />
-      )}
-      <div className="flex gap-2">
-        <input className="input tabular" type="password" inputMode="numeric" maxLength={6} placeholder={hasPin ? "PIN baru (4–6 angka)" : "PIN 4–6 angka"} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} aria-label="PIN baru" />
-        <button
-          className="btn-primary"
-          disabled={pin.length < 4}
-          onClick={async () => {
-            setError(null);
-            try {
-              await api("/auth/pin", { body: { pin, currentPin: current } });
-              setPin("");
-              setCurrent("");
-              bump();
-              showToast(hasPin ? "PIN diganti." : "PIN dipasang.");
-            } catch (e) {
-              setError((e as Error).message);
-            }
-          }}
-        >
-          {hasPin ? "Ganti" : "Pasang"}
-        </button>
-      </div>
-      {hasPin && (
-        <button
-          className="text-rose-700 dark:text-rose-400"
-          onClick={async () => {
-            setError(null);
-            try {
-              await api("/auth/pin", { method: "DELETE", body: { currentPin: current } });
-              setCurrent("");
-              bump();
-              showToast("PIN dihapus.");
-            } catch (e) {
-              setError((e as Error).message);
-            }
-          }}
-        >
-          Hapus PIN
-        </button>
-      )}
-      <ErrorNote message={error} />
-    </section>
   );
 }
 

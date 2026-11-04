@@ -10,7 +10,7 @@ Pencatat keuangan pribadi yang **terisi sendiri** dari email bukti bayar bank & 
 - **Ganti nama merchant** ("9XY9 MPM ALFAMART…" → "Alfamart"), **bagi transaksi** ke beberapa kategori, dan **abaikan dari laporan** (reimburse/titipan).
 - **Anggaran** total & per kategori, **Laporan** tren 6 bulan, merchant terbesar, rekap mingguan, dan **deteksi tagihan/langganan** bulanan.
 - **Target tabungan** (setoran manual atau mengikuti saldo akun), **ekspor CSV**, **mode privasi** (sembunyikan nominal).
-- **Login sekali**: sesi 180 hari yang diperpanjang otomatis, plus **PIN** untuk membuka aplikasi.
+- **Login sekali**: sesi 180 hari yang diperpanjang otomatis.
 - **Notifikasi HP** (Web Push): rekap Senin pagi, anggaran 80%/100%, tagihan besok.
 - Web app + **PWA** (bisa dipasang di Android lewat Chrome). Berjalan di **Cloudflare Workers + Neon Postgres**, gratis.
 

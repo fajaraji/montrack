@@ -3,8 +3,8 @@ import type { DB } from "../db/client";
 import { settings } from "../db/schema";
 import type { SettingsDTO } from "../../shared/types";
 
-const DEFAULTS: SettingsDTO = { monthlyBudget: null, ownerNames: [], hasPin: false, checklistDismissed: false };
-/** Kunci yang boleh diubah lewat PATCH /settings (pinHash diatur lewat endpoint khusus). */
+const DEFAULTS: SettingsDTO = { monthlyBudget: null, ownerNames: [], checklistDismissed: false };
+/** Kunci yang boleh diubah lewat PATCH /settings. */
 const EDITABLE = new Set(["monthlyBudget", "ownerNames", "checklistDismissed"]);
 
 export async function getSettings(db: DB): Promise<SettingsDTO> {
@@ -13,7 +13,6 @@ export async function getSettings(db: DB): Promise<SettingsDTO> {
   return {
     monthlyBudget: typeof map.monthlyBudget === "number" ? map.monthlyBudget : DEFAULTS.monthlyBudget,
     ownerNames: Array.isArray(map.ownerNames) ? (map.ownerNames as string[]) : DEFAULTS.ownerNames,
-    hasPin: typeof map.pinHash === "string" && map.pinHash.length > 0,
     checklistDismissed: map.checklistDismissed === true,
   };
 }

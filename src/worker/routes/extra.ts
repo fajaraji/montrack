@@ -1,11 +1,8 @@
 import type { Hono } from "hono";
 import { and, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
-import { deleteCookie } from "hono/cookie";
 import type { AppEnv } from "../app";
 import { goals, notifications, pushSubscriptions, transactions } from "../db/schema";
 import { HttpError, bad, int, str, toDTO } from "../http";
-import { SESSION_COOKIE, checkPin, hashPin } from "../auth";
-import { deleteSetting, getRawSetting, setRawSetting } from "../services/settings";
 import { learnRule } from "../services/categorize";
 import { suggestCategories } from "../services/suggest";
 import { deleteRename, loadRenames, upsertRename } from "../services/renames";
@@ -19,50 +16,7 @@ import { latestNotifications, notify, pokeAll, unreadCount } from "../services/p
 import { parseYm, fromWib } from "../../shared/time";
 import type { NotificationDTO, ReviewItemDTO, UndoPayload } from "../../shared/types";
 
-const MAX_PIN_FAILS = 5;
-
 export function registerExtraRoutes(app: Hono<AppEnv>) {
-  // ---------- PIN ----------
-  app.post("/auth/pin", async (c) => {
-    const b = await c.req.json<{ pin?: string; currentPin?: string }>();
-    const pin = String(b.pin ?? "");
-    if (!/^\d{4,6}$/.test(pin)) throw bad("PIN harus 4–6 angka");
-    const stored = await getRawSetting(c.var.db, "pinHash");
-    if (typeof stored === "string" && !(await checkPin(String(b.currentPin ?? ""), stored))) {
-      throw new HttpError(401, "PIN lama salah");
-    }
-    await setRawSetting(c.var.db, "pinHash", await hashPin(pin));
-    await deleteSetting(c.var.db, "pinFails");
-    return c.json({ ok: true });
-  });
-  app.delete("/auth/pin", async (c) => {
-    const b = await c.req.json<{ currentPin?: string }>().catch(() => ({}) as { currentPin?: string });
-    const stored = await getRawSetting(c.var.db, "pinHash");
-    if (typeof stored === "string" && !(await checkPin(String(b.currentPin ?? ""), stored))) {
-      throw new HttpError(401, "PIN salah");
-    }
-    await deleteSetting(c.var.db, "pinHash");
-    return c.json({ ok: true });
-  });
-  /** Buka kunci aplikasi. Setelah 5 kali salah, sesi diakhiri dan harus login dengan password. */
-  app.post("/auth/pin/verify", async (c) => {
-    const b = await c.req.json<{ pin?: string }>();
-    const stored = await getRawSetting(c.var.db, "pinHash");
-    if (typeof stored !== "string") return c.json({ ok: true });
-    if (await checkPin(String(b.pin ?? ""), stored)) {
-      await deleteSetting(c.var.db, "pinFails");
-      return c.json({ ok: true });
-    }
-    const fails = Number((await getRawSetting(c.var.db, "pinFails")) ?? 0) + 1;
-    if (fails >= MAX_PIN_FAILS) {
-      await deleteSetting(c.var.db, "pinFails");
-      deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
-      return c.json({ error: "Terlalu banyak salah. Masuk lagi dengan password.", locked: true }, 401);
-    }
-    await setRawSetting(c.var.db, "pinFails", fails);
-    return c.json({ error: `PIN salah. Sisa ${MAX_PIN_FAILS - fails} percobaan.` }, 401);
-  });
-
   // ---------- Tinjau ----------
   app.get("/review", async (c) => {
     const rows = await c.var.db

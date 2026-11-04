@@ -32,7 +32,6 @@ export async function getChecklist(db: DB): Promise<ChecklistDTO> {
       { id: "owner", label: "Isi nama pemilik rekening", done: s.ownerNames.length > 0, href: "/pengaturan", hint: "Agar transfer ke rekening sendiri tidak dihitung pengeluaran." },
       { id: "balance", label: "Sesuaikan saldo setiap akun", done: balancesSet, href: "/akun", hint: "Akun yang dibuat otomatis belum tahu saldo awalnya." },
       { id: "budget", label: "Pasang anggaran", done: s.monthlyBudget != null || Number(budgeted?.n ?? 0) > 0, href: "/anggaran", hint: "Total per bulan atau per kategori." },
-      { id: "pin", label: "Pasang PIN untuk membuka aplikasi", done: s.hasPin, href: "/pengaturan", hint: "Lebih cepat dari mengetik password." },
     ],
   };
 }
