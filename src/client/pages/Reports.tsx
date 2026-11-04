@@ -2,207 +2,250 @@ import { useState } from "react";
 import { api } from "../lib/api";
 import { useAsync, useStore } from "../lib/store";
 import { navigate } from "../lib/router";
-import { ErrorNote, Money, MonthSwitcher, PageHeader, Spinner } from "../components/ui";
+import { ErrorNote, Money, MonthSwitcher, Spinner } from "../components/ui";
+import { Icon } from "../components/Icon";
+import { LineChart } from "../components/charts";
 import { formatRupiah, formatRupiahShort } from "../../shared/money";
 import { MONTHS_ID, formatYm, parseYm } from "../../shared/time";
 import type { RecurringDTO, ReportsDTO, WeeklyRecapDTO } from "../../shared/types";
-
-function shortMonth(ym: string) {
-  return MONTHS_ID[Number(ym.slice(5)) - 1].slice(0, 3);
-}
 
 function fmtDate(key: string) {
   const [, m, d] = key.split("-").map(Number);
   return `${d} ${MONTHS_ID[m - 1].slice(0, 3)}`;
 }
 
-function Trend({ r }: { r: ReportsDTO }) {
-  const max = Math.max(1, ...r.trend.flatMap((t) => [t.expense, t.income]));
-  return (
-    <section className="card">
-      <h2 className="mb-3 font-semibold">Tren 6 bulan</h2>
-      <div className="flex h-40 items-end gap-3" role="img" aria-label="Grafik pengeluaran dan pemasukan 6 bulan">
-        {r.trend.map((t) => (
-          <div key={t.month} className="flex flex-1 flex-col items-center gap-1">
-            <div className="flex h-32 w-full items-end justify-center gap-0.5">
-              <div className="w-1/2 rounded-t-md bg-ink dark:bg-white" style={{ height: `${Math.max(2, (t.expense / max) * 100)}%` }} title={`Keluar ${formatRupiah(t.expense)}`} />
-              <div className="w-1/2 rounded-t-md bg-[#ffb38a]" style={{ height: `${Math.max(2, (t.income / max) * 100)}%` }} title={`Masuk ${formatRupiah(t.income)}`} />
-            </div>
-            <span className={`text-[11px] ${t.month === r.month ? "font-semibold" : "text-stone-500"}`}>{shortMonth(t.month)}</span>
-          </div>
-        ))}
-      </div>
-      <div className="mt-2 flex gap-4 text-xs text-stone-500">
-        <span><span className="mr-1 inline-block size-2 rounded-full bg-ink dark:bg-white" />Pengeluaran</span>
-        <span><span className="mr-1 inline-block size-2 rounded-full bg-[#ffb38a]" />Pemasukan</span>
-      </div>
-      <table className="mt-3 w-full text-sm">
-        <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
-          {[...r.trend].reverse().map((t) => (
-            <tr key={t.month}>
-              <td className="py-1.5">{MONTHS_ID[Number(t.month.slice(5)) - 1]} {t.month.slice(0, 4)}</td>
-              <td className="tabular py-1.5 text-right">{formatRupiah(t.expense)}</td>
-              <td className="tabular py-1.5 text-right text-emerald-700 dark:text-emerald-400">{t.income ? `+${formatRupiah(t.income)}` : "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
-function Recap({ r }: { r: WeeklyRecapDTO }) {
-  const { category } = useStore();
-  const diff = r.total - r.prevTotal;
-  return (
-    <section className="card">
-      <h2 className="font-semibold">Rekap minggu lalu</h2>
-      <p className="text-xs text-stone-500">{fmtDate(r.weekStart)} – {fmtDate(r.weekEnd)}</p>
-      {r.count === 0 ? (
-        <p className="mt-2 text-sm text-stone-500">Tidak ada pengeluaran tercatat.</p>
-      ) : (
-        <>
-          <p className="tabular mt-2 text-2xl font-bold">{formatRupiah(r.total)}</p>
-          <p className="text-sm text-stone-500">
-            {r.count} transaksi
-            {r.prevTotal > 0 && (
-              <>
-                {" · "}
-                <span className={diff > 0 ? "text-rose-700 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-400"}>
-                  {formatRupiah(Math.abs(diff))} {diff > 0 ? "lebih banyak" : "lebih hemat"}
-                </span>{" "}
-                dari minggu sebelumnya
-              </>
-            )}
-          </p>
-          <ul className="mt-3 space-y-1 text-sm">
-            {r.topCategories.map((c) => (
-              <li key={c.categoryId ?? "none"} className="flex justify-between">
-                <span>{category(c.categoryId)?.icon ?? "?"} {category(c.categoryId)?.name ?? "Belum dikategorikan"}</span>
-                <Money value={c.amount} />
-              </li>
-            ))}
-          </ul>
-          {r.biggest && (
-            <p className="mt-2 text-xs text-stone-500">
-              Terbesar: {r.biggest.merchant ?? "—"} <span className="tabular">{formatRupiah(r.biggest.amount)}</span> ({fmtDate(r.biggest.date)})
-            </p>
-          )}
-        </>
-      )}
-    </section>
-  );
-}
-
+/** Daftar tagihan rutin (dipakai juga di Beranda). */
 export function Recurring({ items, compact = false }: { items: RecurringDTO[]; compact?: boolean }) {
   const { category } = useStore();
   const list = compact ? items.filter((r) => r.daysUntil >= -3 && r.daysUntil <= 7) : items;
-  if (!list.length) return compact ? null : <p className="text-sm text-stone-500">Belum ada pola tagihan bulanan (butuh minimal 3 bulan riwayat).</p>;
+  if (!list.length) return compact ? null : <p className="py-4 text-sm text-white/50">Belum ada pola tagihan bulanan. Butuh minimal 3 bulan riwayat.</p>;
   return (
-    <ul className="divide-y divide-stone-100 text-sm dark:divide-stone-800">
+    <ul className="space-y-2">
       {list.map((r) => (
-        <li key={r.key} className="flex items-center justify-between gap-2 py-2">
-          <span className="min-w-0">
-            <span className="block truncate font-medium">{category(r.categoryId)?.icon ?? "🔁"} {r.name}</span>
-            <span className="block text-xs text-stone-500">
+        <li key={r.key} className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
+          <span className="icon-tile size-9 text-base">{category(r.categoryId)?.icon ?? <Icon name="repeat" className="size-4" />}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold">{r.name}</span>
+            <span className="block text-xs text-white/45">
               {r.daysUntil < 0 ? `Lewat ${-r.daysUntil} hari` : r.daysUntil === 0 ? "Hari ini" : r.daysUntil === 1 ? "Besok" : `${fmtDate(r.nextDate)} · ${r.daysUntil} hari lagi`}
-              {!compact && ` · ${r.occurrences}× tercatat`}
             </span>
           </span>
-          <Money value={r.amount} className="shrink-0" />
+          <Money value={r.amount} className="shrink-0 text-sm font-bold" />
         </li>
       ))}
     </ul>
   );
 }
 
-export function Reports() {
+const TABS = [
+  { id: "ringkasan", label: "Ringkasan" },
+  { id: "kategori", label: "Kategori" },
+  { id: "merchant", label: "Merchant" },
+  { id: "tagihan", label: "Tagihan" },
+] as const;
+type Tab = (typeof TABS)[number]["id"];
+
+function Overview({ r, recap }: { r: ReportsDTO; recap: WeeklyRecapDTO | null }) {
   const { category } = useStore();
+  const cur = r.trend[r.trend.length - 1];
+  const full = r.trend.slice(0, -1).filter((t) => t.expense > 0);
+  const avg = full.length ? Math.round(full.reduce((s, t) => s + t.expense, 0) / full.length) : 0;
+  const diff = recap ? recap.total - recap.prevTotal : 0;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3">
+        <div className="card-accent p-3.5">
+          <p className="text-xs text-white/80">Keluar</p>
+          <p className="tabular mt-1 text-base font-bold whitespace-nowrap sm:text-lg">{formatRupiahShort(cur.expense)}</p>
+        </div>
+        <div className="card p-3.5">
+          <p className="text-xs text-white/50">Masuk</p>
+          <p className="tabular mt-1 text-base font-bold whitespace-nowrap sm:text-lg text-emerald-400">{formatRupiahShort(cur.income)}</p>
+        </div>
+        <div className="card p-3.5">
+          <p className="text-xs text-white/50">Rata-rata</p>
+          <p className="tabular mt-1 text-base font-bold whitespace-nowrap sm:text-lg">{formatRupiahShort(avg)}</p>
+        </div>
+      </div>
+
+      <section className="card">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="font-bold">Arus kas 6 bulan</h2>
+            <p className="text-xs text-white/45">Ketuk titik untuk melihat angka</p>
+          </div>
+          <div className="flex gap-3 text-xs text-white/55">
+            <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[#ffb38a]" />Masuk</span>
+            <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-white" />Keluar</span>
+          </div>
+        </div>
+        <div className="mt-3">
+          <LineChart
+            labels={r.trend.map((t) => MONTHS_ID[Number(t.month.slice(5)) - 1].slice(0, 3))}
+            series={[
+              { name: "Masuk", color: "#ffb38a", values: r.trend.map((t) => t.income) },
+              { name: "Keluar", color: "#f4f4f5", values: r.trend.map((t) => t.expense) },
+            ]}
+          />
+        </div>
+      </section>
+
+      {recap && recap.count > 0 && (
+        <section className="card">
+          <p className="kbd mb-3">Minggu lalu · {fmtDate(recap.weekStart)}–{fmtDate(recap.weekEnd)}</p>
+          <p className="tabular text-gradient text-3xl font-bold">{formatRupiah(recap.total)}</p>
+          <p className="mt-1 text-sm text-white/55">
+            dari {recap.count} transaksi
+            {recap.prevTotal > 0 && (
+              <>
+                {", "}
+                <span className={diff > 0 ? "text-rose-400" : "text-emerald-400"}>
+                  {formatRupiah(Math.abs(diff))} {diff > 0 ? "lebih banyak" : "lebih hemat"}
+                </span>{" "}
+                dari minggu sebelumnya
+              </>
+            )}
+            .
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {recap.topCategories.map((c) => (
+              <span key={c.categoryId ?? "none"} className="chip py-1 text-xs">
+                {category(c.categoryId)?.icon ?? "?"} {category(c.categoryId)?.name ?? "Lainnya"} · <span className="tabular">{formatRupiahShort(c.amount)}</span>
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function Categories({ r, month }: { r: ReportsDTO; month: string }) {
+  const { category } = useStore();
+  const list = r.categories.filter((c) => c.current || c.average);
+  const max = Math.max(1, ...list.map((c) => Math.max(c.current, c.average)));
+  if (!list.length) return <p className="card text-sm text-white/50">Belum ada pengeluaran.</p>;
+  return (
+    <section className="card">
+      <p className="mb-3 text-xs text-white/45">Bulan ini dibanding rata-rata 5 bulan sebelumnya. Garis tipis = rata-rata.</p>
+      <ul className="space-y-1">
+        {list.map((c) => {
+          const cat = category(c.categoryId);
+          const change = c.average ? Math.round(((c.current - c.average) / c.average) * 100) : null;
+          return (
+            <li key={c.categoryId ?? "none"}>
+              <button
+                className="-mx-2 w-[calc(100%+1rem)] rounded-2xl px-2 py-2.5 text-left transition hover:bg-white/[0.04]"
+                onClick={() => navigate(`/transaksi?month=${month}&type=expense&categoryId=${c.categoryId ?? "none"}`)}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="icon-tile size-9 text-base">{cat?.icon ?? "?"}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">{cat?.name ?? "Belum dikategorikan"}</span>
+                  {change != null && change !== 0 && (
+                    <span className={`badge ${change > 15 ? "bg-rose-500/10 text-rose-400" : change < -15 ? "bg-emerald-500/10 text-emerald-400" : "bg-white/[0.06] text-white/55"}`}>
+                      {change > 0 ? "▲" : "▼"} {Math.abs(change)}%
+                    </span>
+                  )}
+                  <Money value={c.current} className="w-24 shrink-0 text-right text-sm font-bold" />
+                </div>
+                <div className="relative mt-2 ml-12 h-1.5 rounded-full bg-white/[0.06]">
+                  <div className="h-full rounded-full bg-[linear-gradient(90deg,#ffb38a,#ff7a59)]" style={{ width: `${(c.current / max) * 100}%` }} />
+                  {c.average > 0 && <div className="absolute -top-1 h-3.5 w-0.5 rounded bg-white/70" style={{ left: `${(c.average / max) * 100}%` }} title={`Rata-rata ${formatRupiah(c.average)}`} />}
+                </div>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function Merchants({ r }: { r: ReportsDTO }) {
+  const { category } = useStore();
+  if (!r.topMerchants.length) return <p className="card text-sm text-white/50">Belum ada pengeluaran bulan ini.</p>;
+  const [first, ...rest] = r.topMerchants;
+  return (
+    <div className="space-y-3">
+      <section className="card-accent">
+        <p className="text-xs text-white/80">Paling banyak bulan ini</p>
+        <p className="mt-1 truncate text-xl font-bold">{category(first.categoryId)?.icon} {first.name}</p>
+        <p className="tabular mt-1 text-sm text-white/85">
+          {formatRupiah(first.total)} · {first.count}× transaksi
+        </p>
+      </section>
+      <section className="card">
+        <ul className="space-y-1">
+          {rest.map((m, i) => (
+            <li key={m.name} className="flex items-center gap-3 py-2">
+              <span className="kbd w-7 justify-center">{i + 2}</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                {category(m.categoryId)?.icon} {m.name}
+              </span>
+              <span className="text-xs text-white/40">{m.count}×</span>
+              <Money value={m.total} className="w-24 shrink-0 text-right text-sm font-bold" />
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  );
+}
+
+export function Reports() {
   const [month, setMonth] = useState(formatYm(parseYm(null)));
+  const [tab, setTab] = useState<Tab>("ringkasan");
   const reports = useAsync(() => api<ReportsDTO>(`/reports?month=${month}`), [month]);
   const recap = useAsync(() => api<WeeklyRecapDTO>("/recap"), []);
   const recurring = useAsync(() => api<RecurringDTO[]>("/recurring"), []);
   const r = reports.data;
+  const ym = parseYm(month);
 
   return (
-    <div className="space-y-4">
-      <PageHeader title="Laporan" right={<MonthSwitcher month={month} onChange={setMonth} />} />
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#ff9a6a]/30 bg-[#ff7a4a]/10 px-3 py-1 text-xs font-medium text-[#ffc9a8]">
+            <span className="size-1.5 rounded-full bg-[#ff9a6a] shadow-[0_0_8px_#ff9a6a]" />
+            {MONTHS_ID[ym.month - 1]} {ym.year}
+          </span>
+          <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
+            Laporan <span className="text-gradient">bulanan.</span>
+          </h1>
+        </div>
+        <div className="glass rounded-full px-1">
+          <MonthSwitcher month={month} onChange={setMonth} />
+        </div>
+      </div>
+
+      <div className="glass flex gap-1 overflow-x-auto rounded-full p-1 [scrollbar-width:none]" role="tablist">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            className={`flex-1 rounded-full px-2.5 py-2 text-[13px] whitespace-nowrap transition sm:px-4 sm:text-sm ${tab === t.id ? "bg-white font-semibold text-black" : "text-white/60 hover:text-white"}`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       <ErrorNote message={reports.error} />
       {!r ? (
         <Spinner />
+      ) : tab === "ringkasan" ? (
+        <Overview r={r} recap={recap.data} />
+      ) : tab === "kategori" ? (
+        <Categories r={r} month={month} />
+      ) : tab === "merchant" ? (
+        <Merchants r={r} />
       ) : (
-        <>
-          <Trend r={r} />
-          {recap.data && <Recap r={recap.data} />}
-
-          <section className="card">
-            <h2 className="mb-1 font-semibold">Per kategori</h2>
-            <p className="mb-3 text-xs text-stone-500">Bulan ini dibanding rata-rata 5 bulan sebelumnya.</p>
-            {r.categories.filter((c) => c.current || c.average).length === 0 ? (
-              <p className="text-sm text-stone-500">Belum ada pengeluaran.</p>
-            ) : (
-              <ul className="space-y-3">
-                {r.categories
-                  .filter((c) => c.current || c.average)
-                  .map((c) => {
-                    const cat = category(c.categoryId);
-                    const max = Math.max(1, ...c.perMonth);
-                    const up = c.average > 0 && c.current > c.average * 1.15;
-                    return (
-                      <li key={c.categoryId ?? "none"}>
-                        <button
-                          className="w-full text-left"
-                          onClick={() => navigate(`/transaksi?month=${month}&type=expense&categoryId=${c.categoryId ?? "none"}`)}
-                        >
-                          <div className="flex items-center justify-between gap-2 text-sm">
-                            <span className="truncate">{cat?.icon ?? "?"} {cat?.name ?? "Belum dikategorikan"}</span>
-                            <span className="shrink-0 text-right">
-                              <Money value={c.current} className={`font-medium ${up ? "text-rose-700 dark:text-rose-400" : ""}`} />
-                              <span className="tabular block text-xs text-stone-500">rata-rata {formatRupiahShort(c.average)}</span>
-                            </span>
-                          </div>
-                          <div className="mt-1 flex h-6 items-end gap-0.5" aria-hidden>
-                            {c.perMonth.map((v, i) => (
-                              <div
-                                key={i}
-                                className={`flex-1 rounded-sm ${i === c.perMonth.length - 1 ? "bg-brand-500" : "bg-stone-200 dark:bg-white/10"}`}
-                                style={{ height: `${Math.max(8, (v / max) * 100)}%` }}
-                              />
-                            ))}
-                          </div>
-                        </button>
-                      </li>
-                    );
-                  })}
-              </ul>
-            )}
-          </section>
-
-          <section className="card">
-            <h2 className="mb-3 font-semibold">Merchant terbesar bulan ini</h2>
-            {r.topMerchants.length === 0 ? (
-              <p className="text-sm text-stone-500">Belum ada pengeluaran.</p>
-            ) : (
-              <ol className="divide-y divide-stone-100 text-sm dark:divide-stone-800">
-                {r.topMerchants.map((m, i) => (
-                  <li key={m.name} className="flex items-center justify-between gap-2 py-2">
-                    <span className="min-w-0 truncate">
-                      <span className="mr-2 text-stone-400">{i + 1}.</span>
-                      {category(m.categoryId)?.icon} {m.name} <span className="text-xs text-stone-400">{m.count}×</span>
-                    </span>
-                    <Money value={m.total} className="shrink-0 font-medium" />
-                  </li>
-                ))}
-              </ol>
-            )}
-          </section>
-
-          <section className="card">
-            <h2 className="mb-1 font-semibold">Tagihan & langganan rutin</h2>
-            <p className="mb-2 text-xs text-stone-500">Terdeteksi otomatis dari transaksi yang berulang tiap bulan dengan nominal mirip.</p>
-            {recurring.data ? <Recurring items={recurring.data} /> : <Spinner />}
-          </section>
-        </>
+        <section className="card">
+          <p className="mb-3 text-xs text-white/45">Terdeteksi otomatis dari transaksi yang berulang tiap bulan dengan nominal mirip.</p>
+          {recurring.data ? <Recurring items={recurring.data} /> : <Spinner />}
+        </section>
       )}
     </div>
   );
